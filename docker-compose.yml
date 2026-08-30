@@ -1,0 +1,62 @@
+# IterLab — local / single-host deployment.
+#
+#   Bundled database:   docker compose --profile bundled-db up --build
+#   External database:   set ITERLAB_DATABASE_URL in .env, then
+#                        docker compose up --build
+#
+services:
+  api:
+    build:
+      context: ./backend
+    image: iterlab/api:dev
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # When the bundled-db profile is active this points at the "postgres"
+      # service below. With an external DB, .env's ITERLAB_DATABASE_URL wins
+      # (compose merges env_file first, then environment — so we only set a
+      # default here if it is not already provided).
+      ITERLAB_DATABASE_URL: ${ITERLAB_DATABASE_URL:-postgresql+asyncpg://iterlab:iterlab@postgres:5432/iterlab}
+      ITERLAB_REDIS_URL: ${ITERLAB_REDIS_URL:-redis://redis:6379/0}
+      ITERLAB_STORAGE_PATH: /var/lib/iterlab/artifacts
+    ports:
+      - "8000:8000"
+    volumes:
+      - artifacts:/var/lib/iterlab/artifacts
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["bundled-db"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iterlab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iterlab}
+      POSTGRES_DB: ${POSTGRES_DB:-iterlab}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-iterlab}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  redis-data:
+  artifacts:

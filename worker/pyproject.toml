@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "iterlab-worker"
+version = "0.0.1"
+description = "Reference local worker for IterLab"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "psutil>=5.9",
+]
+
+[project.scripts]
+iterlab-worker = "iterlab_worker.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["iterlab_worker"]
