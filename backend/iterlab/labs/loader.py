@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TypeVar
 
 import yaml
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iterlab.config import get_settings
 from iterlab.core.security import generate_token, hash_password
-from iterlab.labs.spec import LabSpec
+from iterlab.labs.spec import AgentSpec, LabSpec
+from iterlab.models.agent import Agent
 from iterlab.models.benchmark import Benchmark
 from iterlab.models.lab import Lab
 from iterlab.models.project import Project
@@ -20,18 +23,28 @@ from iterlab.models.user import User
 logger = logging.getLogger("iterlab.labs")
 
 
-def load_lab_specs(instance_dir: Path) -> list[LabSpec]:
-    labs_dir = instance_dir / "labs"
-    if not labs_dir.is_dir():
+_T = TypeVar("_T", bound=BaseModel)
+
+
+def _load_specs(directory: Path, model: type[_T]) -> list[_T]:
+    if not directory.is_dir():
         return []
-    specs: list[LabSpec] = []
-    for path in sorted(labs_dir.glob("*.y*ml")):
+    out: list[_T] = []
+    for path in sorted(directory.glob("*.y*ml")):
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         try:
-            specs.append(LabSpec.model_validate(raw))
+            out.append(model.model_validate(raw))
         except Exception:  # noqa: BLE001
-            logger.exception("invalid lab spec: %s", path)
-    return specs
+            logger.exception("invalid spec: %s", path)
+    return out
+
+
+def load_lab_specs(instance_dir: Path) -> list[LabSpec]:
+    return _load_specs(instance_dir / "labs", LabSpec)
+
+
+def load_agent_specs(instance_dir: Path) -> list[AgentSpec]:
+    return _load_specs(instance_dir / "agents", AgentSpec)
 
 
 async def _instance_owner(session: AsyncSession) -> User:
@@ -110,12 +123,46 @@ async def sync_lab(session: AsyncSession, spec: LabSpec) -> Lab:
     return lab
 
 
-async def sync_instance_labs(session: AsyncSession, instance_dir: Path | None) -> int:
+async def sync_agent(session: AsyncSession, spec: AgentSpec) -> Agent:
+    owner = await _instance_owner(session)
+    agent = await session.scalar(
+        select(Agent).where(Agent.owner_id == owner.id, Agent.name == spec.name)
+    )
+    if agent is None:
+        agent = Agent(owner_id=owner.id, name=spec.name)
+        session.add(agent)
+    agent.description = spec.description
+    agent.kind = spec.kind
+    agent.managed = True
+    if spec.kind == "cli":
+        agent.provider = "cli"
+        agent.model = None
+        agent.credential_ref = None
+        agent.params = {
+            "command": spec.command,
+            "args": spec.args,
+            "working_dir": spec.working_dir,
+            "env": spec.env,
+        }
+    else:
+        agent.provider = spec.provider
+        agent.model = spec.model
+        agent.credential_ref = spec.credential_env
+        agent.params = spec.params
+    await session.flush()
+    logger.info("synced instance agent %r (%s)", spec.name, spec.kind)
+    return agent
+
+
+async def sync_instance_labs(session: AsyncSession, instance_dir: Path | None) -> tuple[int, int]:
     if instance_dir is None:
-        return 0
-    specs = load_lab_specs(instance_dir)
-    for spec in specs:
-        await sync_lab(session, spec)
-    if specs:
+        return 0, 0
+    lab_specs = load_lab_specs(instance_dir)
+    for lab_spec in lab_specs:
+        await sync_lab(session, lab_spec)
+    agent_specs = load_agent_specs(instance_dir)
+    for agent_spec in agent_specs:
+        await sync_agent(session, agent_spec)
+    if lab_specs or agent_specs:
         await session.commit()
-    return len(specs)
+    return len(lab_specs), len(agent_specs)

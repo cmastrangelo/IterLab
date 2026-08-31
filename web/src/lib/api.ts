@@ -252,3 +252,49 @@ export const getBenchmarkHealth = (benchmarkId: string) =>
   apiFetch<{ ok: boolean; detail: string; adapter: string }>(
     `/benchmarks/${benchmarkId}/health`,
   );
+
+// --- agents ----------------------------------------------------------
+
+export type AgentKind = "cli" | "api";
+
+export interface CliConfig {
+  command: string;
+  args: string[];
+  working_dir: string | null;
+  env: Record<string, string>;
+}
+
+export interface ApiConfig {
+  provider: string;
+  model: string | null;
+  credential_env: string | null;
+  params: Record<string, unknown>;
+}
+
+export interface Agent {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string | null;
+  kind: AgentKind;
+  managed: boolean;
+  cli: CliConfig | null;
+  api: ApiConfig | null;
+  created_at: string;
+}
+
+export interface AgentCreate {
+  name: string;
+  description?: string | null;
+  kind: AgentKind;
+  cli?: Partial<CliConfig>;
+  api?: Partial<ApiConfig>;
+}
+
+export const listAgents = () => apiFetch<Agent[]>("/agents");
+export const createAgent = (body: AgentCreate) =>
+  apiFetch<Agent>("/agents", { method: "POST", body: JSON.stringify(body) });
+export const updateAgent = (id: string, body: Partial<AgentCreate>) =>
+  apiFetch<Agent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+export const deleteAgent = (id: string) =>
+  apiFetch<void>(`/agents/${id}`, { method: "DELETE" });

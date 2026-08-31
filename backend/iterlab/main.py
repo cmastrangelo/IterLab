@@ -30,9 +30,9 @@ async def lifespan(app: FastAPI):
     if settings.instance_sync_on_startup:
         try:
             async with get_sessionmaker()() as session:
-                count = await sync_instance_labs(session, instance_dir)
-            if count:
-                logger.info("provisioned %d instance lab(s)", count)
+                labs, agents = await sync_instance_labs(session, instance_dir)
+            if labs or agents:
+                logger.info("provisioned %d instance lab(s), %d agent(s)", labs, agents)
         except Exception:  # noqa: BLE001 - a bad instance config must not block startup
             logger.exception("instance lab sync failed")
 

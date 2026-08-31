@@ -470,6 +470,132 @@ table.lb tr.is-candidate td {
   color: var(--muted);
 }
 
+/* agents */
+.agents-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.agent-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agent-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px 4px 4px;
+}
+.agent-list li.is-active {
+  border-color: var(--accent);
+}
+.agent-row {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 400;
+}
+.agent-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.agent-detail {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--muted);
+  flex: none;
+}
+.chip-cli {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.chip-api {
+  color: var(--text);
+}
+.ghost-btn {
+  width: auto;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  font-size: 13px;
+}
+.link-danger {
+  width: auto;
+  background: transparent;
+  color: var(--danger);
+  border: none;
+  font-size: 12px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.agent-form label {
+  margin-top: 4px;
+}
+.agent-form .hint {
+  font-size: 12px;
+  margin: -6px 0 8px;
+}
+.radio-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  font-size: 13px;
+  margin: 0;
+}
+.radio input {
+  width: auto;
+  margin: 0;
+}
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.form-actions button {
+  width: auto;
+}
+
+@media (max-width: 900px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .shell {
     grid-template-columns: 1fr;

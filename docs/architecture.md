@@ -24,7 +24,7 @@ in place.
 | Projects | Top-level container owned by a user/org | model _implemented_ |
 | Labs | A workspace within a project: repo connection + agent roster + settings | model _implemented_ |
 | Experiments / Runs | An experiment definition; a run is one execution attempt | model _implemented_ |
-| Agents / Models | LLM agent configs (provider, model, params, tools) | model _implemented_ |
+| Agents / Models | LLM agent configs — `kind: cli` (a local command like `claude`, run by a worker) or `kind: api` (a hosted model). Config only; execution is a worker's job. | model + CRUD API + config UI _implemented_ |
 | Candidates / Lineage | An iteration's output; parent links form a lineage tree | model _implemented_ |
 | Benchmarks | Named evaluation producing comparable scores, run by a pluggable `BenchmarkAdapter` | model + adapter interface + `sql_leaderboard` _implemented_ |
 | Labs (instance) | Deployment-private lab + benchmark definitions provisioned from `instance/labs/*.yaml` | _implemented_ |
@@ -82,8 +82,12 @@ reference secrets by env-var name only. See `instance.example/`.
 
 ## Schema management
 
-Dev: `ITERLAB_DB_AUTO_CREATE=true` runs `CREATE SCHEMA IF NOT EXISTS` +
-`Base.metadata.create_all` on startup, scoped to `ITERLAB_DB_SCHEMA`.
+Dev: `ITERLAB_DB_AUTO_CREATE=true` runs, on startup, scoped to `ITERLAB_DB_SCHEMA`:
+`CREATE SCHEMA IF NOT EXISTS` → `Base.metadata.create_all` → an additive column
+sync (adds model columns that are missing and safe to add — nullable or
+defaulted — and relaxes `NOT NULL` where a model column became nullable). This
+lets additive model changes land without a database reset during pre-Alembic
+development. It never drops or rewrites data.
 
 Production: set `ITERLAB_DB_AUTO_CREATE=false` and run Alembic migrations
 (`backend/alembic/`). IterLab only ever touches its own schema.

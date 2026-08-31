@@ -9,6 +9,8 @@ Current scope:
 - `/labs/[labId]` — lab overview (repo, settings, benchmark list)
 - `/labs/[labId]/benchmarks` — benchmark tab; renders each benchmark's live
   leaderboard from `GET /api/v1/benchmarks/{id}/leaderboard`
+- `/agents` — agent configuration: list + create/edit CLI (`claude` command) or
+  API (provider/model/credential-env) agents
 - access token held in memory, refresh token in `localStorage`, automatic
   refresh + retry on a `401`
 

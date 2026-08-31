@@ -1,0 +1,21 @@
+# Example agents. One agent per file; schema: iterlab.labs.spec.AgentSpec.
+# Provisioned on startup as managed (read-only via the API) agents.
+
+# --- CLI agent: a local command run by a worker ---
+slug: claude-cli
+name: Claude (CLI)
+description: Runs the `claude` CLI. Needs the CLI installed on the worker host.
+kind: cli
+command: claude
+args: []
+working_dir: null
+
+# --- API agent (put in a separate file): a hosted model API ---
+# slug: claude-api
+# name: Claude (API)
+# kind: api
+# provider: anthropic
+# model: claude-sonnet-5
+# credential_env: ANTHROPIC_API_KEY      # env var name only; set the value in instance/.env
+# params:
+#   max_tokens: 8192

@@ -30,6 +30,24 @@ class BenchmarkSpec(BaseModel):
     spec: dict = Field(default_factory=dict)  # adapter-specific config
 
 
+class AgentSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    slug: str = Field(pattern=_SLUG)
+    name: str
+    description: str | None = None
+    kind: str  # "cli" | "api"
+    # cli
+    command: str = "claude"
+    args: list[str] = Field(default_factory=list)
+    working_dir: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+    # api
+    provider: str = "anthropic"
+    model: str | None = None
+    credential_env: str | None = None
+    params: dict = Field(default_factory=dict)
+
+
 class LabSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     slug: str = Field(pattern=_SLUG)
