@@ -7,10 +7,10 @@ A ``.env`` file at the repo root (or CWD) is loaded automatically for local dev.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -47,7 +47,9 @@ class Settings(BaseSettings):
     storage_path: str = "./data/artifacts"
 
     # -- http --------------------------------------------------------
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # NoDecode: take the raw env string (comma-separated) and let the validator
+    # split it, instead of pydantic-settings trying to JSON-decode it.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
     api_prefix: str = "/api/v1"
 
     # -- instance (deployment-specific, never committed) ----------------
