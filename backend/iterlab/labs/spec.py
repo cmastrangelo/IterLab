@@ -40,6 +40,7 @@ class AgentSpec(BaseModel):
     kind: str  # "cli" | "api"
     # cli
     command: str = "claude"
+    flavor: str = "claude"  # "claude" | "codex" | "generic"
     args: list[str] = Field(default_factory=list)
     working_dir: str | None = None
     env: dict[str, str] = Field(default_factory=dict)

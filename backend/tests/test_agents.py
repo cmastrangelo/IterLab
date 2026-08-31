@@ -25,9 +25,26 @@ async def test_create_cli_agent(client: AsyncClient) -> None:
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["kind"] == "cli"
-    assert body["cli"] == {"command": "claude", "args": ["-p"], "working_dir": "/repo", "env": {}}
+    assert body["cli"] == {
+        "command": "claude",
+        "flavor": "claude",
+        "args": ["-p"],
+        "working_dir": "/repo",
+        "env": {},
+    }
     assert body["api"] is None
     assert body["managed"] is False
+
+
+async def test_create_cli_agent_with_flavor(client: AsyncClient) -> None:
+    headers = await _auth(client, "flavor@example.com")
+    resp = await client.post(
+        "/agents",
+        headers=headers,
+        json={"name": "codex", "kind": "cli", "cli": {"command": "codex", "flavor": "codex"}},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["cli"]["flavor"] == "codex"
 
 
 async def test_create_api_agent_defaults_and_credential_ref(client: AsyncClient) -> None:

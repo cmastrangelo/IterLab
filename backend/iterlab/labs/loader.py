@@ -156,6 +156,7 @@ async def sync_agent(session: AsyncSession, spec: AgentSpec) -> Agent:
         agent.credential_ref = None
         agent.params = {
             "command": spec.command,
+            "flavor": spec.flavor,
             "args": spec.args,
             "working_dir": spec.working_dir,
             "env": spec.env,

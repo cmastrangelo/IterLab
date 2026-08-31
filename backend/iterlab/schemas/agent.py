@@ -12,6 +12,10 @@ AgentKind = Literal["cli", "api"]
 class CliConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     command: str = "claude"
+    # how the CLI is driven headlessly (prompt/session/resume flags, output
+    # parsing). "generic" just runs `command args prompt`. Consumers that need
+    # session continuity look at this.
+    flavor: str = "claude"  # "claude" | "codex" | "generic"
     args: list[str] = Field(default_factory=list)
     working_dir: str | None = None
     env: dict[str, str] = Field(default_factory=dict)

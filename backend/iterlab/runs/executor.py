@@ -109,9 +109,18 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
         raise ValueError(f"lab {experiment.lab_id} not found")
 
     workflow = experiment.workflow or {}
-    steps: list[dict] = workflow.get("steps", [])
+    steps: list[dict] = [dict(s) for s in workflow.get("steps", [])]
     ctx_state = dict(run.context or {})
     iterations = int(ctx_state.get("iterations") or workflow.get("iterations", 1))
+
+    # per-run agent override: applied to any step whose config names an agent
+    agent_override = ctx_state.get("agent_override")
+    if agent_override:
+        for step in steps:
+            cfg = dict(step.get("config") or {})
+            if cfg.get("agent"):
+                cfg["agent"] = agent_override
+                step["config"] = cfg
 
     run.status = RunStatus.running
     run.started_at = _now()
@@ -239,6 +248,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
         if done_cand is not None:
             done_cand.status = CandidateStatus.evaluated
         run.context = {
+            **ctx_state,
             "iterations": iterations,
             "iterations_done": it + 1,
             "agent_session_id": run.agent_session_id,

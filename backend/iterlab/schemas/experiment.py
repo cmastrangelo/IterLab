@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class RunCreate(BaseModel):
     # override the workflow's default loop count for this run
     iterations: int | None = Field(default=None, ge=1, le=50)
+    # override the agent used by any step whose config has an "agent" key
+    agent: str | None = None
 
 
 class ExperimentOut(BaseModel):

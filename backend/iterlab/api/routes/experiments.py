@@ -116,11 +116,14 @@ async def create_run(
     last = await session.scalar(
         select(Run).where(Run.experiment_id == exp.id).order_by(Run.iteration.desc()).limit(1)
     )
+    run_context: dict = {"iterations": iterations}
+    if body and body.agent:
+        run_context["agent_override"] = body.agent
     run = Run(
         experiment_id=exp.id,
         status="pending",
         iteration=(last.iteration + 1) if last else 1,
-        context={"iterations": iterations},
+        context=run_context,
     )
     session.add(run)
     await session.flush()
