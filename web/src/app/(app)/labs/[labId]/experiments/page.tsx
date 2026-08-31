@@ -194,12 +194,12 @@ export default function ExperimentsTab() {
                   {[...r.candidates]
                     .sort((a, b) => a.iteration - b.iteration)
                     .map((c) => {
-                      const agentStep = r.steps.find(
-                        (s) =>
-                          s.iteration === c.iteration &&
-                          s.output != null &&
-                          "agent" in s.output,
+                      const agentSteps = r.steps.filter(
+                        (s) => s.output != null && "agent" in s.output,
                       );
+                      const agentStep =
+                        agentSteps.find((s) => s.iteration === c.iteration) ??
+                        (agentSteps.length === 1 ? agentSteps[0] : undefined);
                       const agentName = agentStep?.output?.agent as string | undefined;
                       const flavor = (agentStep?.output?.flavor as string | undefined) ?? "";
                       return (
