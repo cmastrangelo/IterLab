@@ -11,11 +11,12 @@ pairs that already succeeded and replays their outputs.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iterlab.models.agent import Agent
@@ -24,9 +25,16 @@ from iterlab.models.candidate import Candidate
 from iterlab.models.enums import CandidateStatus, RunStatus
 from iterlab.models.experiment import Experiment, Run
 from iterlab.models.lab import Lab
+from iterlab.models.prompt import Prompt
 from iterlab.models.run_step import RunStep
 from iterlab.schemas.agent import AgentOut
-from iterlab.workflows.base import BenchmarkOutcome, CandidateInfo, StepContext, StepError
+from iterlab.workflows.base import (
+    BenchmarkOutcome,
+    CandidateInfo,
+    PromptRef,
+    StepContext,
+    StepError,
+)
 from iterlab.workflows.registry import get_step_handler
 
 logger = logging.getLogger("iterlab.runs")
@@ -67,6 +75,33 @@ async def _candidate_for(session: AsyncSession, run: Run, iteration: int) -> Can
         session.add(cand)
         await session.flush()
     return cand
+
+
+async def _version_prompt(session: AsyncSession, lab_id: uuid.UUID, ref: PromptRef) -> Prompt:
+    digest = hashlib.sha256(ref.template.encode()).hexdigest()
+    existing = await session.scalar(
+        select(Prompt).where(
+            Prompt.lab_id == lab_id, Prompt.slug == ref.slug, Prompt.digest == digest
+        )
+    )
+    if existing is not None:
+        return existing
+    max_v = await session.scalar(
+        select(func.max(Prompt.version)).where(
+            Prompt.lab_id == lab_id, Prompt.slug == ref.slug
+        )
+    )
+    prompt = Prompt(
+        lab_id=lab_id,
+        slug=ref.slug,
+        version=0 if max_v is None else max_v + 1,
+        text=ref.template,
+        digest=digest,
+    )
+    session.add(prompt)
+    await session.flush()
+    logger.info("recorded prompt %s v%d for lab %s", ref.slug, prompt.version, lab_id)
+    return prompt
 
 
 async def _record_benchmark(
@@ -225,7 +260,17 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
             rs.status = "succeeded"
             rs.output = result.output
             rs.finished_at = _now()
-            iter_outputs[handler_key] = result.output
+
+            if result.prompt is not None:
+                prompt = await _version_prompt(session, lab.id, result.prompt)
+                rs.prompt_id = prompt.id
+                rs.output = {
+                    **result.output,
+                    "prompt_id": str(prompt.id),
+                    "prompt_slug": prompt.slug,
+                    "prompt_version": prompt.version,
+                }
+            iter_outputs[handler_key] = rs.output
 
             if result.agent_session_id:
                 run.agent_session_id = result.agent_session_id
@@ -235,6 +280,9 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                 cand = await _candidate_for(session, run, it)
                 if result.candidate is not None:
                     _apply_candidate(cand, result.candidate)
+                if result.prompt is not None:
+                    pv = rs.output["prompt_version"]
+                    cand.extra = {**(cand.extra or {}), "prompt_version": pv}
                 for outcome in result.benchmarks:
                     await _record_benchmark(session, lab.id, run, cand, outcome)
 

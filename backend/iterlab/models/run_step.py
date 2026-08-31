@@ -35,5 +35,10 @@ class RunStep(UUIDPrimaryKey, Timestamps, Base):
     output: Mapped[dict | None] = mapped_column(JSONMap)
     error: Mapped[str | None] = mapped_column(Text)
 
+    # the versioned prompt this step used, when it ran an agent
+    prompt_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("prompts.id", ondelete="SET NULL"), index=True
+    )
+
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

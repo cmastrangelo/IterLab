@@ -10,6 +10,7 @@ import { LabProvider } from "./lab-context";
 const TABS = [
   { slug: "", label: "Overview" },
   { slug: "experiments", label: "Experiments" },
+  { slug: "prompts", label: "Prompts" },
   { slug: "benchmarks", label: "Benchmarks" },
 ];
 

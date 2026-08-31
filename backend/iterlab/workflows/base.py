@@ -80,12 +80,22 @@ class BenchmarkOutcome:
 
 
 @dataclass(slots=True)
+class PromptRef:
+    """A prompt template a step used. The executor versions it per (lab, slug)."""
+
+    slug: str            # prompt "line", e.g. "initial" / "iterate"
+    template: str        # the versioned text (may contain {placeholders})
+    rendered: str | None = None  # what was actually sent, for the record
+
+
+@dataclass(slots=True)
 class StepResult:
     output: dict[str, Any] = field(default_factory=dict)
     # promoted to first-class columns by the executor when present:
     agent_session_id: str | None = None
     candidate: CandidateInfo | None = None
     benchmarks: list[BenchmarkOutcome] = field(default_factory=list)
+    prompt: PromptRef | None = None
     summary: str | None = None
 
 

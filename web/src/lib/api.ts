@@ -396,3 +396,22 @@ export const createRun = (experimentId: string) =>
 export const retryRun = (runId: string) =>
   apiFetch<Run>(`/runs/${runId}/retry`, { method: "POST" });
 export const getRun = (runId: string) => apiFetch<RunDetail>(`/runs/${runId}`);
+
+// --- prompts --------------------------------------------------------
+
+export interface Prompt {
+  id: string;
+  lab_id: string;
+  slug: string;
+  version: number;
+  text: string;
+  digest: string;
+  created_at: string;
+  uses: number;
+  scored: number;
+  avg_score: number | null;
+  best_score: number | null;
+}
+
+export const listLabPrompts = (labId: string) =>
+  apiFetch<Prompt[]>(`/labs/${labId}/prompts`);

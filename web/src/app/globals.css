@@ -794,6 +794,27 @@ table.lb tr.is-candidate td {
   padding: 8px 0;
 }
 
+/* prompts tab */
+.prompts .panel + .panel {
+  margin-top: 16px;
+}
+.prompt-versions .prompt-row {
+  cursor: pointer;
+}
+.prompt-versions .prompt-row:hover td {
+  background: var(--bg);
+}
+.prompt-versions .prompt-text {
+  max-width: 480px;
+}
+.prompt-versions .prompt-text .mono {
+  color: var(--muted);
+  font-size: 11px;
+}
+.prompt-versions .step-out {
+  max-width: 640px;
+}
+
 @media (max-width: 900px) {
   .agents-grid {
     grid-template-columns: 1fr;

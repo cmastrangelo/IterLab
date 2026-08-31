@@ -75,6 +75,8 @@ export function RunChart({
   const stepOut = (step?.output ?? {}) as Record<string, unknown>;
   const agent = (stepOut.agent as string) ?? fallbackAgent ?? "—";
   const prompt = stepOut.prompt as string | undefined;
+  const promptSlug = stepOut.prompt_slug as string | undefined;
+  const promptVersion = stepOut.prompt_version as number | undefined;
   const resumed = stepOut.resumed as boolean | undefined;
 
   return (
@@ -170,7 +172,15 @@ export function RunChart({
             </dl>
             {prompt && (
               <>
-                <div className="tip-label">prompt (iteration {p.iteration + 1})</div>
+                <div className="tip-label">
+                  prompt (iteration {p.iteration + 1})
+                  {promptSlug != null && (
+                    <span className="mono">
+                      {" "}
+                      · {promptSlug} v{promptVersion ?? 0}
+                    </span>
+                  )}
+                </div>
                 <pre className="tip-prompt">{prompt}</pre>
               </>
             )}
