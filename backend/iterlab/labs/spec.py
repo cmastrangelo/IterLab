@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from iterlab.workflows.spec import WorkflowSpec
+
 _SLUG = r"^[a-z0-9][a-z0-9-]{1,78}[a-z0-9]$"
 
 
@@ -59,3 +61,5 @@ class LabSpec(BaseModel):
     repo: RepoSpec = Field(default_factory=RepoSpec)
     settings: dict = Field(default_factory=dict)
     benchmarks: list[BenchmarkSpec] = Field(default_factory=list)
+    # the lab's experiment workflow (steps run per candidate). Optional.
+    workflow: WorkflowSpec | None = None

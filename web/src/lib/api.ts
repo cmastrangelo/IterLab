@@ -298,3 +298,69 @@ export const updateAgent = (id: string, body: Partial<AgentCreate>) =>
   apiFetch<Agent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 export const deleteAgent = (id: string) =>
   apiFetch<void>(`/agents/${id}`, { method: "DELETE" });
+
+// --- experiments & runs ---------------------------------------------
+
+export interface WorkflowStep {
+  handler: string;
+  name: string | null;
+  config: Record<string, unknown>;
+}
+
+export interface Experiment {
+  id: string;
+  lab_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  workflow: { name?: string; steps?: WorkflowStep[] };
+  managed: boolean;
+  created_at: string;
+}
+
+export interface Run {
+  id: string;
+  experiment_id: string;
+  status: string;
+  iteration: number;
+  summary: string | null;
+  agent_session_id: string | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface RunStep {
+  id: string;
+  position: number;
+  handler: string;
+  name: string | null;
+  status: string;
+  output: Record<string, unknown> | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface RunDetail extends Run {
+  steps: RunStep[];
+  candidate: Record<string, unknown> | null;
+  benchmark_results: Array<{
+    id: string;
+    benchmark_id: string;
+    score: number | null;
+    passed: boolean | null;
+    details: Record<string, unknown>;
+    created_at: string;
+  }>;
+  context: Record<string, unknown>;
+}
+
+export const listExperiments = (labId: string) =>
+  apiFetch<Experiment[]>(`/labs/${labId}/experiments`);
+export const listRuns = (experimentId: string) =>
+  apiFetch<Run[]>(`/experiments/${experimentId}/runs`);
+export const createRun = (experimentId: string) =>
+  apiFetch<Run>(`/experiments/${experimentId}/runs`, { method: "POST" });
+export const getRun = (runId: string) => apiFetch<RunDetail>(`/runs/${runId}`);

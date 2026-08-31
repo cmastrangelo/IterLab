@@ -25,6 +25,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.scripts]
+iterlab-runner = "iterlab.runs.runner:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",

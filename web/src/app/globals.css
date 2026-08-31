@@ -590,6 +590,81 @@ table.lb tr.is-candidate td {
   width: auto;
 }
 
+/* experiments / runs */
+.run-card {
+  border-left: 3px solid var(--border);
+}
+.run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.run-status {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  color: var(--muted);
+}
+.run-running,
+.run-scheduled,
+.run-pending {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.run-succeeded {
+  color: #15803d;
+  border-color: #86efac;
+}
+.run-failed {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+.conv-id {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.link-btn {
+  width: auto;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.steps {
+  margin: 12px 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.step {
+  font-size: 13px;
+}
+.step-name {
+  font-weight: 600;
+  margin-right: 8px;
+}
+.step-out {
+  margin: 6px 0 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 900px) {
   .agents-grid {
     grid-template-columns: 1fr;

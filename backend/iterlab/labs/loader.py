@@ -16,6 +16,7 @@ from iterlab.core.security import generate_token, hash_password
 from iterlab.labs.spec import AgentSpec, LabSpec
 from iterlab.models.agent import Agent
 from iterlab.models.benchmark import Benchmark
+from iterlab.models.experiment import Experiment
 from iterlab.models.lab import Lab
 from iterlab.models.project import Project
 from iterlab.models.user import User
@@ -117,6 +118,21 @@ async def sync_lab(session: AsyncSession, spec: LabSpec) -> Lab:
     for bench in existing:
         if bench.slug not in seen:
             await session.delete(bench)
+
+    # the lab's workflow lives on a managed Experiment
+    if spec.workflow is not None:
+        wf = spec.workflow
+        exp = await session.scalar(
+            select(Experiment).where(Experiment.lab_id == lab.id, Experiment.slug == wf.slug)
+        )
+        if exp is None:
+            exp = Experiment(lab_id=lab.id, slug=wf.slug)
+            session.add(exp)
+        exp.name = wf.name
+        exp.description = wf.description
+        exp.workflow = wf.model_dump()
+        exp.managed = True
+        await session.flush()
 
     await session.flush()
     logger.info("synced instance lab %r (%d benchmarks)", spec.slug, len(spec.benchmarks))

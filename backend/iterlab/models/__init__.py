@@ -13,6 +13,7 @@ from iterlab.models.experiment import Experiment, Run
 from iterlab.models.lab import Lab, LabAgent
 from iterlab.models.metric import Metric
 from iterlab.models.project import Project
+from iterlab.models.run_step import RunStep
 from iterlab.models.task import Task
 from iterlab.models.user import User
 from iterlab.models.worker import Worker
@@ -30,6 +31,7 @@ __all__ = [
     "Metric",
     "Project",
     "Run",
+    "RunStep",
     "Task",
     "User",
     "Worker",
