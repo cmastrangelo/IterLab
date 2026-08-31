@@ -15,6 +15,7 @@ from iterlab.models.run_step import RunStep
 from iterlab.schemas.experiment import (
     BenchmarkResultOut,
     CandidateOut,
+    CandidatePatch,
     ExperimentOut,
     RunCreate,
     RunDetailOut,
@@ -124,6 +125,32 @@ async def create_run(
     session.add(run)
     await session.flush()
     return run
+
+
+# --- candidates -----------------------------------------------------
+candidates_router = APIRouter()
+
+
+@candidates_router.patch(
+    "/{candidate_id}",
+    response_model=CandidateOut,
+    summary="Attach / update free-form labels on a candidate (e.g. a CodinGame result)",
+)
+async def patch_candidate(
+    candidate_id: uuid.UUID, body: CandidatePatch, user: CurrentUser, session: SessionDep
+) -> Candidate:
+    cand = await session.get(Candidate, candidate_id)
+    if cand is None:
+        raise NotFoundError("candidate not found")
+    labels = dict(cand.labels or {})
+    for key, value in body.labels.items():
+        if value is None:
+            labels.pop(key, None)
+        else:
+            labels[key] = value
+    cand.labels = labels
+    await session.flush()
+    return cand
 
 
 # --- runs -------------------------------------------------------------

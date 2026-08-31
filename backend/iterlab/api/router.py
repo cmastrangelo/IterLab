@@ -20,5 +20,6 @@ api_router.include_router(experiments.lab_experiments, prefix="/labs", tags=["ex
 api_router.include_router(benchmarks.router, prefix="/benchmarks", tags=["benchmarks"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(experiments.router, prefix="/experiments", tags=["experiments"])
+api_router.include_router(experiments.candidates_router, prefix="/candidates", tags=["experiments"])
 api_router.include_router(experiments.runs, prefix="/runs", tags=["experiments"])
 api_router.include_router(workers.router, prefix="/workers", tags=["workers"])

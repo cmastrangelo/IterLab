@@ -52,6 +52,12 @@ class CandidateOut(BaseModel):
     cost_usd: float | None
     tokens: int | None
     extra: dict
+    labels: dict | None = None
+
+
+class CandidatePatch(BaseModel):
+    # merged into the candidate's labels; a null value removes that key
+    labels: dict[str, str | None] = Field(default_factory=dict)
 
 
 class BenchmarkResultOut(BaseModel):

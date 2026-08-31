@@ -196,7 +196,14 @@ export default function ExperimentsTab() {
                       <tr key={c.id} className="cand-row">
                         <td className="muted num">↳ {c.iteration}</td>
                         <td className="muted">{c.status}</td>
-                        <td className="mono">{c.extra?.name ?? "—"}</td>
+                        <td className="mono">
+                          {c.extra?.name ?? "—"}
+                          {Object.entries(c.labels ?? {}).map(([k, v]) => (
+                            <span key={k} className="chip chip-label" title={k}>
+                              {k}: {v}
+                            </span>
+                          ))}
+                        </td>
                         <td className="num primary">
                           {typeof c.score === "number" ? `${c.score.toFixed(1)}%` : "—"}
                         </td>

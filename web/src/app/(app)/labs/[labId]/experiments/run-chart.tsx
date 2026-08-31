@@ -15,6 +15,7 @@ interface Point {
   at: number;
   run: RunListItem;
   iteration: number;
+  labels: Record<string, string>;
 }
 
 function points(runs: RunListItem[]): Point[] {
@@ -29,6 +30,7 @@ function points(runs: RunListItem[]): Point[] {
         at: new Date(run.created_at).getTime() + c.iteration,
         run,
         iteration: c.iteration,
+        labels: c.labels ?? {},
       });
     }
   }
@@ -128,6 +130,15 @@ export function RunChart({
             <div className="tip-title">
               {p.label} · <strong>{p.score.toFixed(1)}%</strong>
             </div>
+            {Object.keys(p.labels).length > 0 && (
+              <div className="tip-labels">
+                {Object.entries(p.labels).map(([k, v]) => (
+                  <span key={k} className="chip chip-label">
+                    {k}: {v}
+                  </span>
+                ))}
+              </div>
+            )}
             <dl>
               <div>
                 <dt>run</dt>

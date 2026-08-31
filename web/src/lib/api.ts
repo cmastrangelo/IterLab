@@ -355,7 +355,17 @@ export interface Candidate {
   cost_usd: number | null;
   tokens: number | null;
   extra: Record<string, unknown> & { name?: string };
+  labels: Record<string, string> | null;
 }
+
+export const patchCandidateLabels = (
+  candidateId: string,
+  labels: Record<string, string | null>,
+) =>
+  apiFetch<Candidate>(`/candidates/${candidateId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ labels }),
+  });
 
 export interface RunListItem extends Run {
   candidates: Candidate[];

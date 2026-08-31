@@ -47,3 +47,6 @@ class Candidate(UUIDPrimaryKey, Timestamps, Base):
     tokens: Mapped[int | None] = mapped_column(Integer)
 
     extra: Mapped[dict] = mapped_column(JSONMap, default=dict, nullable=False)
+    # free-form key/value tags a human or external process attaches after the
+    # fact — e.g. {"codingame": "Gold 99"}. Not written by the workflow.
+    labels: Mapped[dict | None] = mapped_column(JSONMap)
