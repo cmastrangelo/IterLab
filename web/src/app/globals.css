@@ -540,6 +540,18 @@ table.lb tr.is-candidate td {
 .chip-api {
   color: var(--text);
 }
+.chip-claude {
+  color: #7c3aed;
+  border-color: color-mix(in srgb, #7c3aed 40%, var(--border));
+  text-transform: none;
+  letter-spacing: 0;
+}
+.chip-codex {
+  color: #0d9488;
+  border-color: color-mix(in srgb, #0d9488 40%, var(--border));
+  text-transform: none;
+  letter-spacing: 0;
+}
 .chip-label {
   margin-left: 8px;
   color: #b45309;

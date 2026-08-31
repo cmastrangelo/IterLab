@@ -169,6 +169,7 @@ export default function ExperimentsTab() {
                 <th>Run</th>
                 <th>Status</th>
                 <th>Candidate</th>
+                <th>Agent</th>
                 <th className="num primary">Ladder %</th>
                 <th className="num">Rank</th>
                 <th className="num">Cost</th>
@@ -186,39 +187,56 @@ export default function ExperimentsTab() {
                     <td>
                       <StatusPill status={r.status} />
                     </td>
-                    <td colSpan={5} className="muted">
+                    <td colSpan={6} className="muted">
                       {r.summary ?? (open === r.id ? "" : "click to expand")}
                     </td>
                   </tr>
                   {[...r.candidates]
                     .sort((a, b) => a.iteration - b.iteration)
-                    .map((c) => (
-                      <tr key={c.id} className="cand-row">
-                        <td className="muted num">↳ {c.iteration}</td>
-                        <td className="muted">{c.status}</td>
-                        <td className="mono">
-                          {c.extra?.name ?? "—"}
-                          {Object.entries(c.labels ?? {}).map(([k, v]) => (
-                            <span key={k} className="chip chip-label" title={k}>
-                              {k}: {v}
-                            </span>
-                          ))}
-                        </td>
-                        <td className="num primary">
-                          {typeof c.score === "number" ? `${c.score.toFixed(1)}%` : "—"}
-                        </td>
-                        <td className="num">
-                          {(c.extra?.ladder_rank as number) ?? "—"}
-                        </td>
-                        <td className="num">
-                          {typeof c.cost_usd === "number" ? `$${c.cost_usd.toFixed(2)}` : "—"}
-                        </td>
-                        <td className="muted">{new Date(r.created_at).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
+                    .map((c) => {
+                      const agentStep = r.steps.find(
+                        (s) =>
+                          s.iteration === c.iteration &&
+                          s.output != null &&
+                          "agent" in s.output,
+                      );
+                      const agentName = agentStep?.output?.agent as string | undefined;
+                      const flavor = (agentStep?.output?.flavor as string | undefined) ?? "";
+                      return (
+                        <tr key={c.id} className="cand-row">
+                          <td className="muted num">↳ {c.iteration}</td>
+                          <td className="muted">{c.status}</td>
+                          <td className="mono">
+                            {c.extra?.name ?? "—"}
+                            {Object.entries(c.labels ?? {}).map(([k, v]) => (
+                              <span key={k} className="chip chip-label" title={k}>
+                                {k}: {v}
+                              </span>
+                            ))}
+                          </td>
+                          <td>
+                            {agentName ? (
+                              <span className={`chip chip-${flavor || "cli"}`}>{agentName}</span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="num primary">
+                            {typeof c.score === "number" ? `${c.score.toFixed(1)}%` : "—"}
+                          </td>
+                          <td className="num">{(c.extra?.ladder_rank as number) ?? "—"}</td>
+                          <td className="num">
+                            {typeof c.cost_usd === "number" ? `$${c.cost_usd.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="muted">
+                            {new Date(r.created_at).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   {open === r.id && (
                     <tr>
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         <RunDetailBlock runId={r.id} />
                       </td>
                     </tr>
