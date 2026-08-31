@@ -665,6 +665,97 @@ table.lb tr.is-candidate td {
   white-space: pre-wrap;
 }
 
+/* run chart */
+.chart-panel .chart-wrap {
+  position: relative;
+}
+.run-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.run-chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.run-chart .axis {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.run-chart .series {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.run-chart .dot {
+  fill: var(--accent);
+  stroke: var(--panel);
+  stroke-width: 2;
+  cursor: pointer;
+}
+.chart-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: min(360px, 80vw);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  pointer-events: none;
+  z-index: 10;
+  font-size: 12px;
+}
+.chart-tip .tip-title {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.chart-tip dl {
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+.chart-tip dl > div {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 8px;
+}
+.chart-tip dt {
+  color: var(--muted);
+}
+.chart-tip dd {
+  margin: 0;
+  word-break: break-word;
+}
+.chart-tip .tip-label {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.chart-tip .tip-prompt {
+  margin: 4px 0 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 10px;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.runs-table .run-row {
+  cursor: pointer;
+}
+.runs-table .run-row:hover td {
+  background: var(--bg);
+}
+.run-detail {
+  padding: 8px 0;
+}
+
 @media (max-width: 900px) {
   .agents-grid {
     grid-template-columns: 1fr;

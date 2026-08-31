@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import {
   createRun,
@@ -8,10 +8,12 @@ import {
   getRun,
   listExperiments,
   listRuns,
-  type Run,
+  retryRun,
   type RunDetail,
+  type RunListItem,
 } from "@/lib/api";
 import { useLab } from "../lab-context";
+import { RunChart } from "./run-chart";
 
 const ACTIVE = new Set(["pending", "scheduled", "running"]);
 
@@ -19,7 +21,7 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`run-status run-${status}`}>{status}</span>;
 }
 
-function RunCard({ runId }: { runId: string }) {
+function RunDetailBlock({ runId }: { runId: string }) {
   const [run, setRun] = useState<RunDetail | null>(null);
 
   const load = useCallback(() => getRun(runId).then(setRun).catch(() => {}), [runId]);
@@ -36,21 +38,22 @@ function RunCard({ runId }: { runId: string }) {
   if (!run) return null;
 
   return (
-    <div className="panel run-card">
-      <div className="run-head">
-        <div>
-          <strong>Run #{run.iteration}</strong> <StatusPill status={run.status} />
-        </div>
-        <span className="muted">{new Date(run.created_at).toLocaleString()}</span>
-      </div>
-
-      {run.summary && <p>{run.summary}</p>}
-      {run.error && <p className="error mono">{run.error}</p>}
-
+    <div className="run-detail">
+      {run.error && (
+        <p className="error mono">
+          {run.error}{" "}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => retryRun(run.id).then(load)}
+          >
+            retry
+          </button>
+        </p>
+      )}
       {run.agent_session_id && (
         <p className="mono conv-id">
-          agent conversation:{" "}
-          <code>{run.agent_session_id}</code>{" "}
+          <code>claude --resume {run.agent_session_id}</code>{" "}
           <button
             type="button"
             className="link-btn"
@@ -58,11 +61,8 @@ function RunCard({ runId }: { runId: string }) {
           >
             copy
           </button>
-          <span className="muted"> — review with </span>
-          <code>claude --resume {run.agent_session_id}</code>
         </p>
       )}
-
       <ol className="steps">
         {run.steps.map((s) => (
           <li key={s.id} className={`step step-${s.status}`}>
@@ -75,29 +75,6 @@ function RunCard({ runId }: { runId: string }) {
           </li>
         ))}
       </ol>
-
-      {run.benchmark_results.length > 0 && (
-        <table className="lb">
-          <thead>
-            <tr>
-              <th>Benchmark</th>
-              <th className="num">Score</th>
-              <th>Pass</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {run.benchmark_results.map((r) => (
-              <tr key={r.id}>
-                <td>{r.benchmark_id.slice(0, 8)}</td>
-                <td className="num">{r.score ?? "—"}</td>
-                <td>{r.passed == null ? "—" : r.passed ? "✓" : "✗"}</td>
-                <td className="mono">{JSON.stringify(r.details)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </div>
   );
 }
@@ -105,9 +82,10 @@ function RunCard({ runId }: { runId: string }) {
 export default function ExperimentsTab() {
   const lab = useLab();
   const [experiment, setExperiment] = useState<Experiment | null>(null);
-  const [runs, setRuns] = useState<Run[]>([]);
+  const [runs, setRuns] = useState<RunListItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
 
   const refreshRuns = useCallback((expId: string) => {
     listRuns(expId).then(setRuns).catch((e) => setError(e?.message));
@@ -122,6 +100,14 @@ export default function ExperimentsTab() {
       })
       .catch((e) => setError(e?.message));
   }, [lab.id, refreshRuns]);
+
+  // poll while any run is active
+  useEffect(() => {
+    if (!experiment) return;
+    if (!runs.some((r) => ACTIVE.has(r.status))) return;
+    const t = setInterval(() => refreshRuns(experiment.id), 5000);
+    return () => clearInterval(t);
+  }, [experiment, runs, refreshRuns]);
 
   async function dispatch() {
     if (!experiment) return;
@@ -141,8 +127,15 @@ export default function ExperimentsTab() {
   if (!experiment)
     return <p className="muted">No experiment configured (set a workflow in the lab YAML).</p>;
 
+  const agentStep = experiment.workflow.steps?.find(
+    (s) => (s.config as Record<string, unknown>)?.agent,
+  );
+  const fallbackAgent = (agentStep?.config as Record<string, string>)?.agent;
+
   return (
     <div className="experiments">
+      <RunChart runs={runs} fallbackAgent={fallbackAgent} />
+
       <section className="panel">
         <div className="lb-head">
           <h2>{experiment.name}</h2>
@@ -160,16 +153,74 @@ export default function ExperimentsTab() {
           ))}
         </ol>
         <p className="muted hint">
-          A run is queued as <code>pending</code>. Execute it on a host with the
-          agent CLI + repo checkout: <code>iterlab-runner --once</code>.
+          A run is queued <code>pending</code>. Execute it on a host with the agent
+          CLI + repo checkout: <code>iterlab-runner --once</code>.
         </p>
       </section>
 
-      {runs.length === 0 ? (
-        <p className="muted">No runs yet.</p>
-      ) : (
-        runs.map((r) => <RunCard key={r.id} runId={r.id} />)
-      )}
+      <section className="panel">
+        <h2>Runs</h2>
+        {runs.length === 0 ? (
+          <p className="muted">No runs yet.</p>
+        ) : (
+          <table className="lb runs-table">
+            <thead>
+              <tr>
+                <th className="num">#</th>
+                <th>Status</th>
+                <th>Solution</th>
+                <th className="num">Score</th>
+                <th className="num">Cost</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...runs].reverse().map((r) => {
+                const sol =
+                  (r.candidate?.extra?.name as string) ??
+                  (Object.values(r.context).find(
+                    (v) => v && typeof v === "object" && "solution" in v,
+                  ) as { solution?: string })?.solution ??
+                  "—";
+                return (
+                  <Fragment key={r.id}>
+                    <tr
+                      className="run-row"
+                      onClick={() => setOpen(open === r.id ? null : r.id)}
+                    >
+                      <td className="num">{r.iteration}</td>
+                      <td>
+                        <StatusPill status={r.status} />
+                      </td>
+                      <td className="mono">{sol}</td>
+                      <td className="num primary">
+                        {typeof r.candidate?.score === "number"
+                          ? `${r.candidate.score.toFixed(1)}%`
+                          : "—"}
+                      </td>
+                      <td className="num">
+                        {typeof r.candidate?.cost_usd === "number"
+                          ? `$${r.candidate.cost_usd.toFixed(2)}`
+                          : "—"}
+                      </td>
+                      <td className="muted">
+                        {new Date(r.created_at).toLocaleString()}
+                      </td>
+                    </tr>
+                    {open === r.id && (
+                      <tr>
+                        <td colSpan={6}>
+                          <RunDetailBlock runId={r.id} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
     </div>
   );
 }

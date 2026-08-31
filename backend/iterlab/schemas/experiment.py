@@ -74,6 +74,13 @@ class RunOut(BaseModel):
     created_at: datetime
 
 
+class RunListItemOut(RunOut):
+    """A run plus just enough for a progress chart: its candidate + step outputs."""
+
+    candidate: CandidateOut | None = None
+    context: dict = {}
+
+
 class RunDetailOut(RunOut):
     steps: list[RunStepOut] = []
     candidate: CandidateOut | None = None

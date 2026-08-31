@@ -343,9 +343,26 @@ export interface RunStep {
   finished_at: string | null;
 }
 
-export interface RunDetail extends Run {
+export interface Candidate {
+  id: string;
+  iteration: number;
+  status: string;
+  summary: string | null;
+  commit_sha: string | null;
+  branch: string | null;
+  score: number | null;
+  cost_usd: number | null;
+  tokens: number | null;
+  extra: Record<string, unknown>;
+}
+
+export interface RunListItem extends Run {
+  candidate: Candidate | null;
+  context: Record<string, unknown>;
+}
+
+export interface RunDetail extends RunListItem {
   steps: RunStep[];
-  candidate: Record<string, unknown> | null;
   benchmark_results: Array<{
     id: string;
     benchmark_id: string;
@@ -354,13 +371,14 @@ export interface RunDetail extends Run {
     details: Record<string, unknown>;
     created_at: string;
   }>;
-  context: Record<string, unknown>;
 }
 
 export const listExperiments = (labId: string) =>
   apiFetch<Experiment[]>(`/labs/${labId}/experiments`);
 export const listRuns = (experimentId: string) =>
-  apiFetch<Run[]>(`/experiments/${experimentId}/runs`);
+  apiFetch<RunListItem[]>(`/experiments/${experimentId}/runs`);
 export const createRun = (experimentId: string) =>
   apiFetch<Run>(`/experiments/${experimentId}/runs`, { method: "POST" });
+export const retryRun = (runId: string) =>
+  apiFetch<Run>(`/runs/${runId}/retry`, { method: "POST" });
 export const getRun = (runId: string) => apiFetch<RunDetail>(`/runs/${runId}`);

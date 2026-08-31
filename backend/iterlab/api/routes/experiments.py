@@ -17,6 +17,7 @@ from iterlab.schemas.experiment import (
     CandidateOut,
     ExperimentOut,
     RunDetailOut,
+    RunListItemOut,
     RunOut,
     RunStepOut,
 )
@@ -57,16 +58,32 @@ async def get_experiment(
 
 
 @router.get(
-    "/{experiment_id}/runs", response_model=list[RunOut], summary="List an experiment's runs"
+    "/{experiment_id}/runs",
+    response_model=list[RunListItemOut],
+    summary="List an experiment's runs (with candidate + step outputs for charting)",
 )
 async def list_runs(
     experiment_id: uuid.UUID, user: CurrentUser, session: SessionDep
-) -> list[Run]:
-    return list(
+) -> list[RunListItemOut]:
+    runs_ = list(
         await session.scalars(
-            select(Run).where(Run.experiment_id == experiment_id).order_by(Run.created_at.desc())
+            select(Run).where(Run.experiment_id == experiment_id).order_by(Run.created_at)
         )
     )
+    cands = {
+        c.run_id: c
+        for c in await session.scalars(
+            select(Candidate).where(Candidate.run_id.in_([r.id for r in runs_]))
+        )
+    }
+    items: list[RunListItemOut] = []
+    for r in runs_:
+        item = RunListItemOut.model_validate(r)
+        cand = cands.get(r.id)
+        item.candidate = CandidateOut.model_validate(cand) if cand else None
+        item.context = r.context or {}
+        items.append(item)
+    return items
 
 
 @router.post(
