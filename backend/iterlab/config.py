@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
     api_prefix: str = "/api/v1"
 
+    # -- instance (deployment-specific, never committed) ----------------
+    # Directory holding this deployment's private lab definitions and adapter
+    # plugins. Everything under it is git-ignored. If unset, IterLab looks for
+    # an "instance/" directory next to the repo root and uses it when present.
+    instance_dir: str | None = None
+    # Owner for labs provisioned from instance config. Auto-created on startup.
+    instance_owner_email: str = "instance@iterlab.local"
+    instance_sync_on_startup: bool = True
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

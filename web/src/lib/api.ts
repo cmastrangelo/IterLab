@@ -186,3 +186,69 @@ export async function logout(): Promise<void> {
 export async function fetchMe(): Promise<User> {
   return apiFetch<User>("/auth/me");
 }
+
+// --- labs & benchmarks -------------------------------------------------
+
+export interface Lab {
+  id: string;
+  project_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  repo_url: string | null;
+  repo_default_branch: string;
+  settings: Record<string, unknown>;
+  source: "manual" | "instance";
+  created_at: string;
+}
+
+export interface Benchmark {
+  id: string;
+  lab_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  adapter: string;
+  primary_metric: string | null;
+  higher_is_better: boolean;
+  managed: boolean;
+  created_at: string;
+}
+
+export interface LabDetail extends Lab {
+  benchmarks: Benchmark[];
+}
+
+export interface LeaderboardColumn {
+  key: string;
+  label: string;
+  kind: "number" | "string" | "percent" | "integer";
+  primary: boolean;
+}
+
+export interface LeaderboardRow {
+  rank: number;
+  entrant: string;
+  score: number | null;
+  is_baseline: boolean;
+  is_candidate: boolean;
+  values: Record<string, unknown>;
+}
+
+export interface Leaderboard {
+  benchmark_slug: string;
+  title: string;
+  columns: LeaderboardColumn[];
+  rows: LeaderboardRow[];
+  updated_at: string | null;
+  note: string | null;
+}
+
+export const listLabs = () => apiFetch<Lab[]>("/labs");
+export const getLab = (id: string) => apiFetch<LabDetail>(`/labs/${id}`);
+export const getLeaderboard = (benchmarkId: string) =>
+  apiFetch<Leaderboard>(`/benchmarks/${benchmarkId}/leaderboard`);
+export const getBenchmarkHealth = (benchmarkId: string) =>
+  apiFetch<{ ok: boolean; detail: string; adapter: string }>(
+    `/benchmarks/${benchmarkId}/health`,
+  );

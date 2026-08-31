@@ -1,0 +1,40 @@
+# Example lab: a connected repo evaluated against an external SQL leaderboard.
+slug: example-lab
+name: Example Lab
+description: >
+  Template lab. Copy to instance/labs/, adjust, and it is provisioned on startup.
+
+project_slug: instance
+project_name: Instance
+
+repo:
+  url: git@github.com:you/your-project.git
+  branch: main
+  # credential_env: EXAMPLE_REPO_TOKEN
+
+settings:
+  baseline: main            # free-form; the lab's reference point
+  goal: "improve the thing"
+
+benchmarks:
+  - slug: ladder
+    name: Ladder
+    description: 1000-game ranked ladder; result is win rate + ladder rank.
+    adapter: sql_leaderboard
+    primary_metric: win_pct
+    higher_is_better: true
+    spec:
+      dsn_env: MY_LADDER_DSN
+      title: "Example Ladder"
+      query: >
+        SELECT entrant, win_pct, rating, games
+        FROM some_schema.some_ladder
+        ORDER BY win_pct DESC
+      entrant_column: entrant
+      score_column: win_pct
+      # baseline_column: is_baseline
+      # updated_at_query: "SELECT max(updated_at) FROM some_schema.some_ladder"
+      columns:
+        - { key: win_pct, label: "Win %", kind: percent, primary: true }
+        - { key: rating, label: "Rating", kind: number }
+        - { key: games, label: "Games", kind: integer }

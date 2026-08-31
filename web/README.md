@@ -2,15 +2,17 @@
 
 **Next.js (App Router) + React + TypeScript.**
 
-Current scope (skeleton):
+Current scope:
 
 - `/register` and `/login` — talk to `POST /api/v1/auth/*`
-- `/home` — authenticated placeholder ("under construction") with sign-out
+- app shell with a left navbar listing all labs
+- `/labs/[labId]` — lab overview (repo, settings, benchmark list)
+- `/labs/[labId]/benchmarks` — benchmark tab; renders each benchmark's live
+  leaderboard from `GET /api/v1/benchmarks/{id}/leaderboard`
 - access token held in memory, refresh token in `localStorage`, automatic
   refresh + retry on a `401`
 
-Projects / Labs / Experiments / Workers pages come next, against the list
-endpoints that already exist on the API.
+Experiments / Workers pages and candidate runs come next.
 
 ## Develop
 
@@ -43,14 +45,19 @@ docker compose --profile bundled-db up --build      # api + web + redis + postgr
 ```
 src/
   app/
-    layout.tsx        root layout + <AuthProvider>
-    page.tsx          redirects to /home or /login
-    login/            login form
-    register/         registration form
-    home/             authenticated "under construction" page
+    layout.tsx              root layout + <AuthProvider>
+    page.tsx                redirects to /labs or /login
+    login/  register/       auth forms
+    (app)/
+      layout.tsx            app shell: auth guard + left navbar
+      labs/page.tsx         redirects to the first lab
+      labs/[labId]/
+        layout.tsx          lab header + tab nav
+        page.tsx             Overview
+        benchmarks/page.tsx  Benchmarks tab + leaderboard table
   lib/
-    api.ts            fetch client + token handling
-    auth.tsx          React context: user, login, register, logout
+    api.ts                  fetch client + token handling + typed endpoints
+    auth.tsx                React context: user, login, register, logout
 ```
 
 ## Notes / later

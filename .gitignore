@@ -22,6 +22,9 @@ htmlcov/
 data/
 *.sqlite3
 
+# Deployment-specific instance config — never committed (see instance.example/)
+/instance/
+
 # Node / web
 node_modules/
 .next/

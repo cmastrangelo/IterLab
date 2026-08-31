@@ -11,7 +11,9 @@ from iterlab.api.router import api_router
 from iterlab.config import get_settings
 from iterlab.core.errors import install_error_handlers
 from iterlab.db.bootstrap import bootstrap_database
-from iterlab.db.session import dispose_engine
+from iterlab.db.session import dispose_engine, get_sessionmaker
+from iterlab.instance import initialize_instance
+from iterlab.labs import sync_instance_labs
 from iterlab.logging_config import configure_logging
 
 logger = logging.getLogger("iterlab")
@@ -23,6 +25,17 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.log_level, json=settings.is_production)
     logger.info("starting IterLab %s (env=%s)", __version__, settings.env)
     await bootstrap_database()
+
+    instance_dir = initialize_instance()
+    if settings.instance_sync_on_startup:
+        try:
+            async with get_sessionmaker()() as session:
+                count = await sync_instance_labs(session, instance_dir)
+            if count:
+                logger.info("provisioned %d instance lab(s)", count)
+        except Exception:  # noqa: BLE001 - a bad instance config must not block startup
+            logger.exception("instance lab sync failed")
+
     logger.info("startup complete")
     try:
         yield

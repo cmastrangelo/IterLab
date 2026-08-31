@@ -11,7 +11,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     if (loading) return;
-    router.replace(user ? "/home" : "/login");
+    router.replace(user ? "/labs" : "/login");
   }, [user, loading, router]);
 
   return (

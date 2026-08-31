@@ -26,7 +26,8 @@ in place.
 | Experiments / Runs | An experiment definition; a run is one execution attempt | model _implemented_ |
 | Agents / Models | LLM agent configs (provider, model, params, tools) | model _implemented_ |
 | Candidates / Lineage | An iteration's output; parent links form a lineage tree | model _implemented_ |
-| Benchmarks | Named evaluation producing comparable scores | model _implemented_ |
+| Benchmarks | Named evaluation producing comparable scores, run by a pluggable `BenchmarkAdapter` | model + adapter interface + `sql_leaderboard` _implemented_ |
+| Labs (instance) | Deployment-private lab + benchmark definitions provisioned from `instance/labs/*.yaml` | _implemented_ |
 | Workers | Registered executors advertising CPU/GPU/VRAM | model + protocol _implemented_ |
 | Tasks | Unit of work dispatched to a worker | model _implemented_ |
 | Metrics | Time-series measurements (score, cost, tokens, latency) | model _implemented_ |
@@ -67,7 +68,17 @@ Workers authenticate with a dedicated worker token, separate from user sessions.
 | `iterlab.queues.Queue` | Redis lists/streams | SQS, NATS, Kafka |
 | `iterlab.scheduler.Scheduler` | in-process greedy | Ray, ClearML, Kubernetes Jobs |
 | `iterlab.auth.AuthProvider` | local password | OIDC/SSO, org RBAC |
+| `iterlab.benchmarks.BenchmarkAdapter` | `sql_leaderboard` | game referees, CI harnesses, hosted eval services (custom adapters under `instance/adapters/`) |
 | LLM providers | (config only) | Anthropic, OpenAI, local, ... via a provider registry |
+
+## Instance configuration
+
+IterLab commits nothing about any specific external system. Each deployment
+adds its private wiring under a git-ignored `instance/` directory:
+`.env` (secrets, loaded into the environment), `labs/*.yaml` (lab + benchmark
+definitions, upserted on startup as `source: instance`), `adapters/*.py`
+(custom `BenchmarkAdapter` plugins, imported on startup). Benchmark specs
+reference secrets by env-var name only. See `instance.example/`.
 
 ## Schema management
 

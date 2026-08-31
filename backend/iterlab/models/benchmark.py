@@ -18,13 +18,24 @@ class Benchmark(UUIDPrimaryKey, Timestamps, Base):
     lab_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("labs.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    slug: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
 
-    # how to run it (command, dataset ref, scoring rubric) — backend-agnostic
+    # which BenchmarkAdapter runs this benchmark (registry key), e.g.
+    # "sql_leaderboard", "locm_round_robin".
+    adapter: Mapped[str] = mapped_column(String(80), nullable=False)
+    # adapter-specific configuration (connection refs, queries, params).
+    # backend-agnostic; never contains secrets directly, only *_env references.
     spec: Mapped[dict] = mapped_column(JSONMap, default=dict, nullable=False)
+
+    # the headline metric this benchmark resolves to (e.g. "win_pct", "rank").
+    primary_metric: Mapped[str | None] = mapped_column(String(80))
     # higher score is better? used when ranking candidates
     higher_is_better: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # true when created/maintained by the instance lab loader (read-only via API)
+    managed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class BenchmarkResult(UUIDPrimaryKey, Timestamps, Base):

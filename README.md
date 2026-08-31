@@ -144,8 +144,13 @@ backend/            FastAPI control plane
     storage/        ArtifactStorage abstraction (filesystem today)
     workers/        worker <-> controller protocol
   tests/
+  iterlab/
+    benchmarks/     BenchmarkAdapter abstraction + built-in adapters
+    labs/           instance lab spec + provisioning loader
+    instance.py     discovery of the deployment's private instance/ config
 worker/             reference local worker
-web/                Next.js web interface (auth + placeholder home)
+web/                Next.js web interface (auth, labs, benchmarks)
+instance.example/   template for the git-ignored instance/ config
 docs/               architecture notes
 ```
 
@@ -170,6 +175,25 @@ All settings are read from environment variables prefixed with `ITERLAB_`
 | `ITERLAB_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 
 ---
+
+## Labs & the instance directory
+
+A **Lab** is a workspace: a connected repo, its baseline, and one or more
+**benchmarks**. IterLab ships nothing about any specific repo or benchmark
+backend — a deployment adds that privately under `instance/` (git-ignored):
+
+```
+instance/
+  .env             # secrets: DSNs, tokens (loaded into the environment)
+  labs/*.yaml       # lab definitions, provisioned into the DB on startup
+  adapters/*.py     # optional custom BenchmarkAdapter plugins
+```
+
+Copy `instance.example/` to `instance/` and edit. On startup each
+`labs/*.yaml` is upserted as a `source: instance` lab; its benchmarks are
+created read-only. A benchmark names a **BenchmarkAdapter** (`sql_leaderboard`
+is built in — a ranked leaderboard from an arbitrary SQL query) plus a `spec`
+that references secrets by env-var name only, never inline.
 
 ## Contributing
 

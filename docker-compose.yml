@@ -20,10 +20,14 @@ services:
       ITERLAB_DATABASE_URL: ${ITERLAB_DATABASE_URL:-postgresql+asyncpg://iterlab:iterlab@postgres:5432/iterlab}
       ITERLAB_REDIS_URL: ${ITERLAB_REDIS_URL:-redis://redis:6379/0}
       ITERLAB_STORAGE_PATH: /var/lib/iterlab/artifacts
+      # deployment-specific lab definitions + adapter plugins + secrets
+      ITERLAB_INSTANCE_DIR: /app/instance
     ports:
       - "8000:8000"
     volumes:
       - artifacts:/var/lib/iterlab/artifacts
+      # git-ignored; create ./instance/ from instance.example/ for this deployment
+      - ./instance:/app/instance:ro
     depends_on:
       redis:
         condition: service_started

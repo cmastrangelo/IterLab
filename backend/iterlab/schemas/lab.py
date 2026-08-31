@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from iterlab.schemas.benchmark import BenchmarkOut
+
 
 class LabCreate(BaseModel):
     project_id: uuid.UUID
@@ -27,4 +29,9 @@ class LabOut(BaseModel):
     repo_url: str | None
     repo_default_branch: str
     settings: dict
+    source: str
     created_at: datetime
+
+
+class LabDetailOut(LabOut):
+    benchmarks: list[BenchmarkOut] = Field(default_factory=list)

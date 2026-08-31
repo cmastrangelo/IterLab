@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/home");
+    if (!loading && user) router.replace("/labs");
   }, [user, loading, router]);
 
   async function onSubmit(e: FormEvent) {
@@ -26,7 +26,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      router.replace("/home");
+      router.replace("/labs");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Could not reach the server.",

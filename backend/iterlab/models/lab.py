@@ -31,6 +31,10 @@ class Lab(UUIDPrimaryKey, Timestamps, Base):
     # free-form lab configuration (goal prompt, test command, budgets, ...)
     settings: Mapped[dict] = mapped_column(JSONMap, default=dict, nullable=False)
 
+    # "manual" (created via the API/UI) or "instance" (provisioned from this
+    # deployment's private instance config, and read-only via the API).
+    source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)
+
 
 class LabAgent(UUIDPrimaryKey, Timestamps, Base):
     """Association: an agent config assigned to a lab, with a per-lab weight/role."""
