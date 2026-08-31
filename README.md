@@ -57,8 +57,11 @@ cp .env.example .env
 docker compose --profile bundled-db up --build
 ```
 
-This starts the API, Redis, and a PostgreSQL instance. On startup the API
-creates the `iterlab` schema and all tables automatically.
+This starts the web UI, API, Redis, and a PostgreSQL instance. On startup the
+API creates the `iterlab` schema and all tables automatically.
+
+- Web UI — <http://localhost:3000> (register / login / placeholder home)
+- API + interactive docs — <http://localhost:8000/docs>
 
 ### 2b. Run against an existing / external PostgreSQL
 
@@ -80,6 +83,9 @@ IterLab confines itself to its own schema (`iterlab` by default), so it can
 safely share a database with other applications.
 
 ### 3. Use it
+
+Open <http://localhost:3000>, create an account, and you land on the (currently
+placeholder) home page. Or hit the API directly:
 
 ```bash
 # Register
@@ -139,7 +145,7 @@ backend/            FastAPI control plane
     workers/        worker <-> controller protocol
   tests/
 worker/             reference local worker
-web/                Next.js web interface (planned)
+web/                Next.js web interface (auth + placeholder home)
 docs/               architecture notes
 ```
 
