@@ -68,6 +68,22 @@ async def _create_tables() -> None:
     logger.info("ensured %d tables exist", len(Base.metadata.tables))
 
 
+def _scalar_default_sql(column) -> str | None:
+    """A SQL literal for a column's Python-side scalar default, else None."""
+    default = column.default
+    if default is None or getattr(default, "is_callable", False):
+        return None
+    value = getattr(default, "arg", None)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        escaped = value.replace("'", "''")
+        return f"'{escaped}'"
+    return None
+
+
 def _sync_columns_sync(conn: Connection) -> None:
     """Add model columns missing from existing tables, when safe to do so."""
     settings = get_settings()
@@ -96,20 +112,28 @@ def _sync_columns_sync(conn: Connection) -> None:
         for column in table.columns:
             if column.name in have:
                 continue
-            safe = (
-                column.nullable
-                or column.default is not None
-                or column.server_default is not None
-            )
-            if not safe:
+            ddl = str(CreateColumn(column).compile(dialect=dialect))
+            backfill = _scalar_default_sql(column)
+
+            if column.nullable or column.server_default is not None:
+                conn.execute(text(f"ALTER TABLE {qualified} ADD COLUMN {ddl}"))
+            elif backfill is not None:
+                # NOT NULL with only a Python-side default: add WITH a SQL default
+                # so existing rows backfill, then drop it to match the model.
+                conn.execute(
+                    text(f"ALTER TABLE {qualified} ADD COLUMN {ddl} DEFAULT {backfill}")
+                )
+                if is_pg:
+                    conn.execute(
+                        text(f'ALTER TABLE {qualified} ALTER COLUMN "{column.name}" DROP DEFAULT')
+                    )
+            else:
                 logger.warning(
-                    "cannot auto-add NOT NULL column %s.%s (no default) — needs a migration",
+                    "cannot auto-add NOT NULL column %s.%s (no usable default) — needs a migration",
                     table.name,
                     column.name,
                 )
                 continue
-            ddl = CreateColumn(column).compile(dialect=dialect)
-            conn.execute(text(f"ALTER TABLE {qualified} ADD COLUMN {ddl}"))
             logger.info("added missing column %s.%s", table.name, column.name)
 
 
