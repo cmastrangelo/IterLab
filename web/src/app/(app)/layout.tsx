@@ -43,6 +43,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="sidebar-brand">IterLab</div>
 
         <div className="sidebar-section">
+          <div className="sidebar-heading">Agents</div>
+          <nav className="sidebar-nav">
+            <Link href="/agents" className={`sidebar-link${onAgents ? " is-active" : ""}`}>
+              <span className="dot" />
+              Configuration
+            </Link>
+          </nav>
+        </div>
+
+        <div className="sidebar-section">
           <div className="sidebar-heading">Labs</div>
           <nav className="sidebar-nav">
             {labs.map((lab) => (
@@ -59,16 +69,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <span className="sidebar-empty">No labs yet</span>
             )}
             {labsError && <span className="sidebar-empty error">{labsError}</span>}
-          </nav>
-        </div>
-
-        <div className="sidebar-section">
-          <div className="sidebar-heading">Agents</div>
-          <nav className="sidebar-nav">
-            <Link href="/agents" className={`sidebar-link${onAgents ? " is-active" : ""}`}>
-              <span className="dot" />
-              Configuration
-            </Link>
           </nav>
         </div>
       </aside>
