@@ -9,6 +9,7 @@ from iterlab.api.deps import CurrentUser, SessionDep
 from iterlab.core.errors import APIError, NotFoundError
 from iterlab.models.benchmark import BenchmarkResult
 from iterlab.models.candidate import Candidate
+from iterlab.models.enums import RunStatus
 from iterlab.models.experiment import Experiment, Run
 from iterlab.models.run_step import RunStep
 from iterlab.schemas.experiment import (
@@ -97,6 +98,24 @@ async def create_run(
 
 # --- runs -------------------------------------------------------------
 runs = APIRouter()
+
+
+@runs.post(
+    "/{run_id}/retry",
+    response_model=RunOut,
+    summary="Re-queue a failed run (resumes from the first unfinished step)",
+)
+async def retry_run(run_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Run:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise NotFoundError("run not found")
+    if str(run.status) not in {"failed", "cancelled", "lost"}:
+        raise APIError(f"run is {run.status}, not retryable", code="not_retryable")
+    run.status = RunStatus.pending
+    run.error = None
+    run.finished_at = None
+    await session.flush()
+    return run
 
 
 @runs.get("/{run_id}", response_model=RunDetailOut, summary="Run detail with steps + results")

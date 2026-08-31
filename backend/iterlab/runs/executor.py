@@ -131,8 +131,27 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
     agent_rows = await session.scalars(select(Agent))
     agents_view = {a.name: AgentOut.from_model(a).model_dump(mode="json") for a in agent_rows}
 
+    # resume support: replay outputs from steps that already succeeded
+    prior_steps = list(
+        await session.scalars(
+            select(RunStep).where(RunStep.run_id == run.id).order_by(RunStep.position)
+        )
+    )
+    done_positions = set()
+    for ps in prior_steps:
+        if ps.status == "succeeded":
+            done_positions.add(ps.position)
+            outputs[ps.handler] = ps.output or {}
+            outputs[str(ps.position)] = ps.output or {}
+        else:
+            await session.delete(ps)  # re-run failed / half-done steps cleanly
+    await session.commit()
+
     for i, step_spec in enumerate(steps):
         handler_key = step_spec["handler"]
+        if i in done_positions:
+            logger.info("run %s step %d (%s): already done, skipping", run.id, i, handler_key)
+            continue
         rs = RunStep(
             run_id=run.id,
             position=i,

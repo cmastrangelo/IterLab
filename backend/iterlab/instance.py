@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import sys
 from pathlib import Path
 
 from iterlab.config import get_settings
@@ -54,22 +55,33 @@ def load_instance_env(instance_dir: Path) -> None:
 
 
 def load_instance_plugins(instance_dir: Path) -> None:
-    """Import every ``adapters/*.py`` so custom adapters self-register."""
+    """Import every ``adapters/*.py`` so custom adapters self-register.
+
+    The adapters directory is put on ``sys.path`` and each module is imported
+    under its bare name (``locm_steps``) — not a synthetic package — so that
+    functions defined in a plugin can be pickled for multiprocessing (child
+    processes re-import ``locm_steps`` from ``sys.path``).
+    """
     adapters_dir = instance_dir / "adapters"
     if not adapters_dir.is_dir():
         return
+    dir_str = str(adapters_dir)
+    if dir_str not in sys.path:
+        sys.path.insert(0, dir_str)
     for module_path in sorted(adapters_dir.glob("*.py")):
         if module_path.name.startswith("_"):
             continue
-        mod_name = f"iterlab_instance_adapters.{module_path.stem}"
+        mod_name = module_path.stem
         spec = importlib.util.spec_from_file_location(mod_name, module_path)
         if spec is None or spec.loader is None:
             continue
         module = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = module
         try:
             spec.loader.exec_module(module)
             logger.info("loaded instance adapter plugin: %s", module_path.name)
         except Exception:  # noqa: BLE001
+            sys.modules.pop(mod_name, None)
             logger.exception("failed to load instance adapter %s", module_path)
 
 
