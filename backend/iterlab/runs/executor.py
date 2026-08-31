@@ -145,6 +145,13 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
         session.add(rs)
         await session.commit()
 
+        async def _checkpoint(partial: dict, _rs: RunStep = rs) -> None:
+            _rs.output = {**(_rs.output or {}), **partial}
+            sid = partial.get("agent_session_id") or partial.get("conversation_id")
+            if sid:
+                run.agent_session_id = sid
+            await session.commit()
+
         ctx = StepContext(
             run_id=run.id,
             lab=lab_view,
@@ -153,6 +160,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
             outputs=outputs,
             agents=agents_view,
             logger=logging.getLogger(f"iterlab.step.{handler_key}"),
+            checkpoint=_checkpoint,
         )
         try:
             handler = get_step_handler(handler_key)

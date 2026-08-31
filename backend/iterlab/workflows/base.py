@@ -6,6 +6,7 @@ import abc
 import logging
 import os
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -27,9 +28,17 @@ class StepContext:
     # agents available to the deployment, keyed by name: {name: {kind, cli|api, ...}}
     agents: dict[str, Any] = field(default_factory=dict)
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger("iterlab.step"))
+    # persist partial progress mid-step (e.g. an agent session id before the
+    # agent finishes). Merged into the step's recorded output; an
+    # ``agent_session_id`` key is promoted to the run immediately.
+    checkpoint: Callable[[dict[str, Any]], Awaitable[None]] | None = None
 
     def agent(self, name: str | None) -> dict[str, Any] | None:
         return self.agents.get(name) if name else None
+
+    async def save(self, output: dict[str, Any]) -> None:
+        if self.checkpoint is not None:
+            await self.checkpoint(output)
 
     def resolve_secret(self, ref: str | None, *, required: bool = True) -> str | None:
         if not ref:
