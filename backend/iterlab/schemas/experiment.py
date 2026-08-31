@@ -3,7 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class RunCreate(BaseModel):
+    # override the workflow's default loop count for this run
+    iterations: int | None = Field(default=None, ge=1, le=50)
 
 
 class ExperimentOut(BaseModel):
@@ -23,6 +28,7 @@ class RunStepOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    iteration: int
     position: int
     handler: str
     name: str | None
@@ -75,14 +81,15 @@ class RunOut(BaseModel):
 
 
 class RunListItemOut(RunOut):
-    """A run plus just enough for a progress chart: its candidate + step outputs."""
+    """A run plus its candidates + steps — enough to chart each iteration."""
 
-    candidate: CandidateOut | None = None
+    candidates: list[CandidateOut] = []
+    steps: list[RunStepOut] = []
     context: dict = {}
 
 
 class RunDetailOut(RunOut):
     steps: list[RunStepOut] = []
-    candidate: CandidateOut | None = None
+    candidates: list[CandidateOut] = []
     benchmark_results: list[BenchmarkResultOut] = []
     context: dict = {}

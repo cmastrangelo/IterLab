@@ -17,4 +17,8 @@ class WorkflowSpec(BaseModel):
     slug: str = Field(pattern=_SLUG, default="default")
     name: str = "default"
     description: str | None = None
+    # how many times to repeat the whole step list per run. Each iteration
+    # produces its own candidate; a run's context (e.g. an agent conversation
+    # id) carries across iterations.
+    iterations: int = Field(default=1, ge=1, le=50)
     steps: list[StepSpec] = Field(default_factory=list)

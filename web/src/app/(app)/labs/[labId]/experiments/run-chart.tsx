@@ -8,23 +8,31 @@ const W = 760;
 const H = 260;
 const PAD = { l: 44, r: 16, t: 16, b: 30 };
 
-function scored(runs: RunListItem[]): { run: RunListItem; score: number }[] {
-  return runs
-    .filter((r) => typeof r.candidate?.score === "number")
-    .map((r) => ({ run: r, score: r.candidate!.score as number }))
-    .sort(
-      (a, b) =>
-        new Date(a.run.created_at).getTime() - new Date(b.run.created_at).getTime(),
-    );
+interface Point {
+  key: string;
+  label: string;
+  score: number;
+  at: number;
+  run: RunListItem;
+  iteration: number;
 }
 
-function contextValue(ctx: Record<string, unknown>, key: string): unknown {
-  for (const v of Object.values(ctx)) {
-    if (v && typeof v === "object" && key in (v as Record<string, unknown>)) {
-      return (v as Record<string, unknown>)[key];
+function points(runs: RunListItem[]): Point[] {
+  const out: Point[] = [];
+  for (const run of runs) {
+    for (const c of run.candidates) {
+      if (typeof c.score !== "number") continue;
+      out.push({
+        key: c.id,
+        label: c.extra?.name ?? `run ${run.iteration}.${c.iteration}`,
+        score: c.score,
+        at: new Date(run.created_at).getTime() + c.iteration,
+        run,
+        iteration: c.iteration,
+      });
     }
   }
-  return undefined;
+  return out.sort((a, b) => a.at - b.at);
 }
 
 export function RunChart({
@@ -34,14 +42,14 @@ export function RunChart({
   runs: RunListItem[];
   fallbackAgent?: string;
 }) {
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
-  const pts = scored(runs);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const pts = points(runs);
 
   if (pts.length === 0) {
     return (
       <div className="panel">
         <h2>Progress</h2>
-        <p className="muted">No scored runs yet. Dispatch one to see it here.</p>
+        <p className="muted">No scored candidates yet. Dispatch a run to see them here.</p>
       </div>
     );
   }
@@ -55,37 +63,30 @@ export function RunChart({
       : PAD.l + (i / (pts.length - 1)) * (W - PAD.l - PAD.r);
   const py = (s: number) => H - PAD.b - ((s - lo) / (hi - lo || 1)) * (H - PAD.t - PAD.b);
 
-  const yTicks = 4;
-  const ticks = Array.from({ length: yTicks + 1 }, (_, k) => lo + (k / yTicks) * (hi - lo));
+  const ticks = Array.from({ length: 5 }, (_, k) => lo + (k / 4) * (hi - lo));
+  const p = hoverIdx != null ? pts[hoverIdx] : null;
 
-  const hovered = hover ? pts[hover.i] : null;
-  const hCtx = (hovered?.run.context ?? {}) as Record<string, unknown>;
-  const hAgent =
-    (contextValue(hCtx, "agent") as string) ?? fallbackAgent ?? "—";
-  const hPrompt = contextValue(hCtx, "prompt") as string | undefined;
-  const hSolution =
-    (contextValue(hCtx, "solution") as string) ??
-    (hovered?.run.candidate?.extra?.name as string) ??
-    `run #${hovered?.run.iteration}`;
+  // agent step for this candidate's run + iteration
+  const step = p?.run.steps.find(
+    (s) => s.iteration === p.iteration && s.handler.includes("new_solution"),
+  );
+  const stepOut = (step?.output ?? {}) as Record<string, unknown>;
+  const agent = (stepOut.agent as string) ?? fallbackAgent ?? "—";
+  const prompt = stepOut.prompt as string | undefined;
+  const resumed = stepOut.resumed as boolean | undefined;
 
   return (
     <div className="panel chart-panel">
       <div className="lb-head">
         <h2>Progress</h2>
-        <span className="muted">score (ladder win %) per run</span>
+        <span className="muted">score (ladder win %) per candidate</span>
       </div>
 
       <div className="chart-wrap">
         <svg viewBox={`0 0 ${W} ${H}`} className="run-chart" role="img">
           {ticks.map((t, k) => (
             <g key={k}>
-              <line
-                x1={PAD.l}
-                x2={W - PAD.r}
-                y1={py(t)}
-                y2={py(t)}
-                className="grid"
-              />
+              <line x1={PAD.l} x2={W - PAD.r} y1={py(t)} y2={py(t)} className="grid" />
               <text x={PAD.l - 8} y={py(t) + 4} className="axis" textAnchor="end">
                 {t.toFixed(0)}
               </text>
@@ -95,70 +96,71 @@ export function RunChart({
           {pts.length > 1 && (
             <polyline
               className="series"
-              points={pts.map((p, i) => `${px(i)},${py(p.score)}`).join(" ")}
+              points={pts.map((pt, i) => `${px(i)},${py(pt.score)}`).join(" ")}
             />
           )}
 
-          {pts.map((p, i) => (
-            <g key={p.run.id}>
+          {pts.map((pt, i) => (
+            <g key={pt.key}>
               <circle
                 cx={px(i)}
-                cy={py(p.score)}
-                r={hover?.i === i ? 6 : 4}
+                cy={py(pt.score)}
+                r={hoverIdx === i ? 6 : 4}
                 className="dot"
-                onMouseEnter={() => setHover({ i, x: px(i), y: py(p.score) })}
-                onMouseLeave={() => setHover(null)}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
               />
               <text x={px(i)} y={H - PAD.b + 16} className="axis" textAnchor="middle">
-                #{p.run.iteration}
+                {pt.label.replace(/^solution_|\.py$/g, "")}
               </text>
             </g>
           ))}
         </svg>
 
-        {hovered && hover && (
+        {p && hoverIdx != null && (
           <div
             className="chart-tip"
             style={{
-              left: `${(hover.x / W) * 100}%`,
-              top: `${(hover.y / H) * 100}%`,
+              left: `${(px(hoverIdx) / W) * 100}%`,
+              top: `${(py(p.score) / H) * 100}%`,
             }}
           >
             <div className="tip-title">
-              {hSolution} · <strong>{hovered.score.toFixed(1)}%</strong>
+              {p.label} · <strong>{p.score.toFixed(1)}%</strong>
             </div>
             <dl>
               <div>
                 <dt>run</dt>
                 <dd>
-                  #{hovered.run.iteration} · {hovered.run.status}
+                  #{p.run.iteration} · iter {p.iteration}
+                  {resumed ? " · resumed convo" : p.iteration === 0 ? " · new convo" : ""}
                 </dd>
               </div>
               <div>
                 <dt>agent</dt>
-                <dd>{hAgent}</dd>
+                <dd>{agent}</dd>
               </div>
               <div>
                 <dt>when</dt>
-                <dd>{new Date(hovered.run.created_at).toLocaleString()}</dd>
+                <dd>{new Date(p.run.created_at).toLocaleString()}</dd>
               </div>
-              {typeof hovered.run.candidate?.cost_usd === "number" && (
+              {typeof (stepOut.cost_usd as number) === "number" && (
                 <div>
                   <dt>cost</dt>
-                  <dd>${hovered.run.candidate.cost_usd.toFixed(2)}</dd>
+                  <dd>${(stepOut.cost_usd as number).toFixed(2)}</dd>
                 </div>
               )}
-              {hovered.run.agent_session_id && (
+              {p.run.agent_session_id && (
                 <div>
                   <dt>convo</dt>
-                  <dd className="mono">{hovered.run.agent_session_id}</dd>
+                  <dd className="mono">{p.run.agent_session_id}</dd>
                 </div>
               )}
             </dl>
-            {hPrompt && (
+            {prompt && (
               <>
-                <div className="tip-label">prompt</div>
-                <pre className="tip-prompt">{hPrompt}</pre>
+                <div className="tip-label">prompt (iteration {p.iteration + 1})</div>
+                <pre className="tip-prompt">{prompt}</pre>
               </>
             )}
           </div>

@@ -45,6 +45,36 @@ class _Bench(StepHandler):
         )
 
 
+class _IterAgent(StepHandler):
+    """Records its iteration index and what it saw from the prior iteration."""
+
+    key = "test_iter_agent"
+
+    async def run(self, ctx: StepContext) -> StepResult:
+        prior_score = None
+        if ctx.history:
+            prior_score = ctx.history[-1].get("test_iter_bench", {}).get("score")
+        sid = ctx.outputs.get("_sid") or f"conv-{ctx.iteration if ctx.iteration == 0 else 'kept'}"
+        return StepResult(
+            output={"iteration": ctx.iteration, "saw_prior_score": prior_score, "_sid": sid},
+            agent_session_id="conv-fixed" if ctx.iteration == 0 else None,
+            candidate=CandidateInfo(name=f"sol_{ctx.iteration}.py"),
+        )
+
+
+class _IterBench(StepHandler):
+    key = "test_iter_bench"
+
+    async def run(self, ctx: StepContext) -> StepResult:
+        sol = ctx.outputs["test_iter_agent"]["_sid"]  # any value from this iteration
+        score = 50.0 + ctx.iteration * 3
+        return StepResult(
+            output={"score": score, "for": sol},
+            candidate=CandidateInfo(name=f"sol_{ctx.iteration}.py", score=score),
+            benchmarks=[BenchmarkOutcome(benchmark_slug="board", score=score)],
+        )
+
+
 class _Boom(StepHandler):
     key = "test_boom"
 
@@ -54,17 +84,19 @@ class _Boom(StepHandler):
         )
 
 
-for h in (_MakeSolution, _Bench, _Boom):
+for h in (_MakeSolution, _Bench, _Boom, _IterAgent, _IterBench):
     register_step_handler(h)
 
 
-async def _lab_with_workflow(steps: list[StepSpec]) -> tuple[str, str]:
+async def _lab_with_workflow(steps: list[StepSpec], iterations: int = 1) -> tuple[str, str]:
     spec = LabSpec(
         slug="run-lab",
         name="Run Lab",
         project_slug="run-proj",
         benchmarks=[BenchmarkSpec(slug="board", name="Board", adapter="sql_leaderboard")],
-        workflow=WorkflowSpec(slug="iterate", name="Iterate", steps=steps),
+        workflow=WorkflowSpec(
+            slug="iterate", name="Iterate", iterations=iterations, steps=steps
+        ),
     )
     async with get_sessionmaker()() as session:
         lab = await sync_lab(session, spec)
@@ -99,7 +131,8 @@ async def test_dispatch_and_execute_full_workflow(client: AsyncClient) -> None:
     assert detail["agent_session_id"] == "conv-abc"
     assert [s["handler"] for s in detail["steps"]] == ["test_make_solution", "test_bench"]
     assert all(s["status"] == "succeeded" for s in detail["steps"])
-    assert detail["candidate"]["extra"]["name"] == "solution_99.py"
+    assert detail["candidates"][0]["extra"]["name"] == "solution_99.py"
+    assert detail["candidates"][0]["status"] == "evaluated"
     assert detail["benchmark_results"][0]["score"] == 61.0
     assert detail["benchmark_results"][0]["passed"] is True
 
@@ -117,6 +150,40 @@ async def test_failing_step_records_session_id_and_marks_failed(client: AsyncCli
     assert "kaboom" in detail["error"]
     assert detail["agent_session_id"] == "conv-xyz"
     assert detail["steps"][0]["status"] == "failed"
+
+
+async def test_iteration_loop_produces_a_candidate_per_iteration(client: AsyncClient) -> None:
+    headers = await _auth(client)
+    _lab_id, exp_id = await _lab_with_workflow(
+        [StepSpec(handler="test_iter_agent"), StepSpec(handler="test_iter_bench")],
+        iterations=3,
+    )
+    run = (await client.post(f"/experiments/{exp_id}/runs", headers=headers)).json()
+    async with get_sessionmaker()() as session:
+        await execute_run(session, uuid.UUID(run["id"]))
+
+    detail = (await client.get(f"/runs/{run['id']}", headers=headers)).json()
+    assert detail["status"] == "succeeded"
+    # 3 iterations x 2 steps
+    assert [(s["iteration"], s["handler"]) for s in detail["steps"]] == [
+        (0, "test_iter_agent"), (0, "test_iter_bench"),
+        (1, "test_iter_agent"), (1, "test_iter_bench"),
+        (2, "test_iter_agent"), (2, "test_iter_bench"),
+    ]
+    # one candidate per iteration, each scored
+    cands = detail["candidates"]
+    assert [c["iteration"] for c in cands] == [0, 1, 2]
+    assert [c["score"] for c in cands] == [50.0, 53.0, 56.0]
+    assert [c["extra"]["name"] for c in cands] == ["sol_0.py", "sol_1.py", "sol_2.py"]
+    # conversation id set in iteration 0 carries through
+    assert detail["agent_session_id"] == "conv-fixed"
+    # iteration 2's agent saw iteration 1's benchmark score
+    iter2_agent = next(
+        s
+        for s in detail["steps"]
+        if s["iteration"] == 2 and s["handler"] == "test_iter_agent"
+    )
+    assert iter2_agent["output"]["saw_prior_score"] == 53.0
 
 
 async def test_run_requires_workflow(client: AsyncClient) -> None:

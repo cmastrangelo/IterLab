@@ -159,64 +159,65 @@ export default function ExperimentsTab() {
       </section>
 
       <section className="panel">
-        <h2>Runs</h2>
+        <h2>Runs &amp; candidates</h2>
         {runs.length === 0 ? (
           <p className="muted">No runs yet.</p>
         ) : (
           <table className="lb runs-table">
             <thead>
               <tr>
-                <th className="num">#</th>
+                <th>Run</th>
                 <th>Status</th>
-                <th>Solution</th>
-                <th className="num">Score</th>
+                <th>Candidate</th>
+                <th className="num primary">Ladder %</th>
+                <th className="num">Rank</th>
                 <th className="num">Cost</th>
                 <th>When</th>
               </tr>
             </thead>
             <tbody>
-              {[...runs].reverse().map((r) => {
-                const sol =
-                  (r.candidate?.extra?.name as string) ??
-                  (Object.values(r.context).find(
-                    (v) => v && typeof v === "object" && "solution" in v,
-                  ) as { solution?: string })?.solution ??
-                  "—";
-                return (
-                  <Fragment key={r.id}>
-                    <tr
-                      className="run-row"
-                      onClick={() => setOpen(open === r.id ? null : r.id)}
-                    >
-                      <td className="num">{r.iteration}</td>
-                      <td>
-                        <StatusPill status={r.status} />
-                      </td>
-                      <td className="mono">{sol}</td>
-                      <td className="num primary">
-                        {typeof r.candidate?.score === "number"
-                          ? `${r.candidate.score.toFixed(1)}%`
-                          : "—"}
-                      </td>
-                      <td className="num">
-                        {typeof r.candidate?.cost_usd === "number"
-                          ? `$${r.candidate.cost_usd.toFixed(2)}`
-                          : "—"}
-                      </td>
-                      <td className="muted">
-                        {new Date(r.created_at).toLocaleString()}
+              {[...runs].reverse().map((r) => (
+                <Fragment key={r.id}>
+                  <tr className="run-row" onClick={() => setOpen(open === r.id ? null : r.id)}>
+                    <td>
+                      <strong>#{r.iteration}</strong>
+                      <span className="muted"> · {r.candidates.length} iter</span>
+                    </td>
+                    <td>
+                      <StatusPill status={r.status} />
+                    </td>
+                    <td colSpan={5} className="muted">
+                      {r.summary ?? (open === r.id ? "" : "click to expand")}
+                    </td>
+                  </tr>
+                  {[...r.candidates]
+                    .sort((a, b) => a.iteration - b.iteration)
+                    .map((c) => (
+                      <tr key={c.id} className="cand-row">
+                        <td className="muted num">↳ {c.iteration}</td>
+                        <td className="muted">{c.status}</td>
+                        <td className="mono">{c.extra?.name ?? "—"}</td>
+                        <td className="num primary">
+                          {typeof c.score === "number" ? `${c.score.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="num">
+                          {(c.extra?.ladder_rank as number) ?? "—"}
+                        </td>
+                        <td className="num">
+                          {typeof c.cost_usd === "number" ? `$${c.cost_usd.toFixed(2)}` : "—"}
+                        </td>
+                        <td className="muted">{new Date(r.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  {open === r.id && (
+                    <tr>
+                      <td colSpan={7}>
+                        <RunDetailBlock runId={r.id} />
                       </td>
                     </tr>
-                    {open === r.id && (
-                      <tr>
-                        <td colSpan={6}>
-                          <RunDetailBlock runId={r.id} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
+                  )}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         )}

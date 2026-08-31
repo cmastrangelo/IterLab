@@ -16,6 +16,7 @@ from iterlab.schemas.experiment import (
     BenchmarkResultOut,
     CandidateOut,
     ExperimentOut,
+    RunCreate,
     RunDetailOut,
     RunListItemOut,
     RunOut,
@@ -70,17 +71,24 @@ async def list_runs(
             select(Run).where(Run.experiment_id == experiment_id).order_by(Run.created_at)
         )
     )
-    cands = {
-        c.run_id: c
-        for c in await session.scalars(
-            select(Candidate).where(Candidate.run_id.in_([r.id for r in runs_]))
-        )
-    }
+    run_ids = [r.id for r in runs_]
+    cands_by_run: dict[uuid.UUID, list[Candidate]] = {rid: [] for rid in run_ids}
+    for c in await session.scalars(select(Candidate).where(Candidate.run_id.in_(run_ids))):
+        cands_by_run[c.run_id].append(c)
+    steps_by_run: dict[uuid.UUID, list[RunStep]] = {rid: [] for rid in run_ids}
+    for s in await session.scalars(
+        select(RunStep)
+        .where(RunStep.run_id.in_(run_ids))
+        .order_by(RunStep.iteration, RunStep.position)
+    ):
+        steps_by_run[s.run_id].append(s)
+
     items: list[RunListItemOut] = []
     for r in runs_:
         item = RunListItemOut.model_validate(r)
-        cand = cands.get(r.id)
-        item.candidate = CandidateOut.model_validate(cand) if cand else None
+        cs = sorted(cands_by_run[r.id], key=lambda c: c.iteration)
+        item.candidates = [CandidateOut.model_validate(c) for c in cs]
+        item.steps = [RunStepOut.model_validate(s) for s in steps_by_run[r.id]]
         item.context = r.context or {}
         items.append(item)
     return items
@@ -93,12 +101,17 @@ async def list_runs(
     summary="Dispatch a run of this experiment (a local runner executes it)",
 )
 async def create_run(
-    experiment_id: uuid.UUID, user: CurrentUser, session: SessionDep
+    experiment_id: uuid.UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    body: RunCreate | None = None,
 ) -> Run:
     exp = await _get_experiment(session, experiment_id)
-    if not (exp.workflow or {}).get("steps"):
+    workflow = exp.workflow or {}
+    if not workflow.get("steps"):
         raise APIError("experiment has no workflow steps to run", code="no_workflow")
 
+    iterations = (body.iterations if body else None) or int(workflow.get("iterations", 1))
     last = await session.scalar(
         select(Run).where(Run.experiment_id == exp.id).order_by(Run.iteration.desc()).limit(1)
     )
@@ -106,7 +119,7 @@ async def create_run(
         experiment_id=exp.id,
         status="pending",
         iteration=(last.iteration + 1) if last else 1,
-        context={},
+        context={"iterations": iterations},
     )
     session.add(run)
     await session.flush()
@@ -141,16 +154,20 @@ async def get_run(run_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> 
     if run is None:
         raise NotFoundError("run not found")
     steps = await session.scalars(
-        select(RunStep).where(RunStep.run_id == run.id).order_by(RunStep.position)
+        select(RunStep)
+        .where(RunStep.run_id == run.id)
+        .order_by(RunStep.iteration, RunStep.position)
     )
-    candidate = await session.scalar(select(Candidate).where(Candidate.run_id == run.id))
+    candidates = await session.scalars(
+        select(Candidate).where(Candidate.run_id == run.id).order_by(Candidate.iteration)
+    )
     results = await session.scalars(
         select(BenchmarkResult).where(BenchmarkResult.run_id == run.id)
     )
 
     detail = RunDetailOut.model_validate(run)
     detail.steps = [RunStepOut.model_validate(s) for s in steps]
-    detail.candidate = CandidateOut.model_validate(candidate) if candidate else None
+    detail.candidates = [CandidateOut.model_validate(c) for c in candidates]
     detail.benchmark_results = [BenchmarkResultOut.model_validate(r) for r in results]
     detail.context = run.context or {}
     return detail

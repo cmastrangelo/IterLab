@@ -24,6 +24,8 @@ class RunStep(UUIDPrimaryKey, Timestamps, Base):
     run_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("runs.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    # 0-based workflow loop index; 0 for a single-pass workflow
+    iteration: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     handler: Mapped[str] = mapped_column(String(80), nullable=False)
     name: Mapped[str | None] = mapped_column(String(200))

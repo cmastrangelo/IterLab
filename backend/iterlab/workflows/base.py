@@ -24,7 +24,15 @@ class StepContext:
     lab: dict[str, Any]  # {id, slug, name, repo_url, settings, ...}
     experiment: dict[str, Any]  # {id, slug, name, config}
     step_config: dict[str, Any]
+    # 0-based loop index within the run (0 for a single-pass workflow)
+    iteration: int = 0
+    # this iteration's completed step outputs, keyed by handler
     outputs: dict[str, Any] = field(default_factory=dict)
+    # prior iterations' step outputs: history[i][handler] -> output
+    history: list[dict[str, Any]] = field(default_factory=list)
+    # the run's agent conversation id, if one has been started (carries across
+    # iterations so a resuming agent step can continue the same conversation)
+    agent_session_id: str | None = None
     # agents available to the deployment, keyed by name: {name: {kind, cli|api, ...}}
     agents: dict[str, Any] = field(default_factory=dict)
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger("iterlab.step"))

@@ -1,5 +1,13 @@
-"""Execute a run: iterate its workflow steps, dispatch each to a step handler,
-and record steps / candidate / benchmark results."""
+"""Execute a run.
+
+A run's workflow is an ordered list of steps, optionally repeated
+``workflow.iterations`` times. Each iteration produces its own candidate; the
+run's context (e.g. an agent conversation id) carries across iterations so a
+later iteration can build on the earlier ones.
+
+The executor is resumable: a re-dispatched run skips ``(iteration, position)``
+pairs that already succeeded and replays their outputs.
+"""
 
 from __future__ import annotations
 
@@ -28,14 +36,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-async def _upsert_candidate(
-    session: AsyncSession, run: Run, existing: Candidate | None, info: CandidateInfo
-) -> Candidate:
-    cand = existing or Candidate(
-        run_id=run.id, iteration=run.iteration, status=CandidateStatus.proposed
-    )
-    if existing is None:
-        session.add(cand)
+def _apply_candidate(cand: Candidate, info: CandidateInfo) -> None:
     if info.summary is not None:
         cand.summary = info.summary
     if info.commit_sha is not None:
@@ -53,7 +54,18 @@ async def _upsert_candidate(
         merged["name"] = info.name
     merged.update(info.extra or {})
     cand.extra = merged
-    await session.flush()
+
+
+async def _candidate_for(session: AsyncSession, run: Run, iteration: int) -> Candidate:
+    cand = await session.scalar(
+        select(Candidate).where(
+            Candidate.run_id == run.id, Candidate.iteration == iteration
+        )
+    )
+    if cand is None:
+        cand = Candidate(run_id=run.id, iteration=iteration, status=CandidateStatus.proposed)
+        session.add(cand)
+        await session.flush()
     return cand
 
 
@@ -61,12 +73,9 @@ async def _record_benchmark(
     session: AsyncSession,
     lab_id: uuid.UUID,
     run: Run,
-    candidate: Candidate | None,
+    candidate: Candidate,
     outcome: BenchmarkOutcome,
 ) -> None:
-    if candidate is None:
-        logger.warning("benchmark %s reported with no candidate — skipping", outcome.benchmark_slug)
-        return
     bench = await session.scalar(
         select(Benchmark).where(
             Benchmark.lab_id == lab_id, Benchmark.slug == outcome.benchmark_slug
@@ -85,9 +94,6 @@ async def _record_benchmark(
             details=outcome.details,
         )
     )
-    primary = (run.context or {}).get("_primary_benchmark")
-    if outcome.score is not None and outcome.benchmark_slug == primary:
-        candidate.score = outcome.score
     await session.flush()
 
 
@@ -101,18 +107,17 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
     lab = await session.get(Lab, experiment.lab_id)
     if lab is None:
         raise ValueError(f"lab {experiment.lab_id} not found")
-    steps = (experiment.workflow or {}).get("steps", [])
+
+    workflow = experiment.workflow or {}
+    steps: list[dict] = workflow.get("steps", [])
+    ctx_state = dict(run.context or {})
+    iterations = int(ctx_state.get("iterations") or workflow.get("iterations", 1))
 
     run.status = RunStatus.running
     run.started_at = _now()
     run.error = None
     await session.commit()
-    logger.info("run %s: executing %d step(s)", run.id, len(steps))
-
-    outputs: dict = dict(run.context or {})
-    candidate: Candidate | None = await session.scalar(
-        select(Candidate).where(Candidate.run_id == run.id)
-    )
+    logger.info("run %s: %d step(s) x %d iteration(s)", run.id, len(steps), iterations)
 
     lab_view = {
         "id": str(lab.id),
@@ -127,105 +132,121 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
         "slug": experiment.slug,
         "name": experiment.name,
         "config": experiment.config or {},
+        "workflow": workflow,
+        "iterations": iterations,
     }
     agent_rows = await session.scalars(select(Agent))
     agents_view = {a.name: AgentOut.from_model(a).model_dump(mode="json") for a in agent_rows}
 
-    # resume support: replay outputs from steps that already succeeded
-    prior_steps = list(
+    # resume: replay outputs of already-succeeded (iteration, position) pairs
+    prior = list(
         await session.scalars(
-            select(RunStep).where(RunStep.run_id == run.id).order_by(RunStep.position)
+            select(RunStep).where(RunStep.run_id == run.id)
         )
     )
-    done_positions = set()
-    for ps in prior_steps:
-        if ps.status == "succeeded":
-            done_positions.add(ps.position)
-            outputs[ps.handler] = ps.output or {}
-            outputs[str(ps.position)] = ps.output or {}
+    done: set[tuple[int, int]] = set()
+    history: list[dict] = [{} for _ in range(iterations)]
+    for ps in prior:
+        if ps.status == "succeeded" and ps.iteration < iterations:
+            done.add((ps.iteration, ps.position))
+            history[ps.iteration][ps.handler] = ps.output or {}
         else:
-            await session.delete(ps)  # re-run failed / half-done steps cleanly
+            await session.delete(ps)
     await session.commit()
 
-    for i, step_spec in enumerate(steps):
-        handler_key = step_spec["handler"]
-        if i in done_positions:
-            logger.info("run %s step %d (%s): already done, skipping", run.id, i, handler_key)
-            continue
-        rs = RunStep(
-            run_id=run.id,
-            position=i,
-            handler=handler_key,
-            name=step_spec.get("name"),
-            config=step_spec.get("config", {}),
-            status="running",
-            started_at=_now(),
-        )
-        session.add(rs)
-        await session.commit()
+    for it in range(iterations):
+        iter_outputs: dict = dict(history[it])
+        for pos, step_spec in enumerate(steps):
+            handler_key = step_spec["handler"]
+            if (it, pos) in done:
+                logger.info("run %s [%d.%d %s]: done, skipping", run.id, it, pos, handler_key)
+                continue
 
-        async def _checkpoint(partial: dict, _rs: RunStep = rs) -> None:
-            _rs.output = {**(_rs.output or {}), **partial}
-            sid = partial.get("agent_session_id") or partial.get("conversation_id")
-            if sid:
-                run.agent_session_id = sid
+            rs = RunStep(
+                run_id=run.id,
+                iteration=it,
+                position=pos,
+                handler=handler_key,
+                name=step_spec.get("name"),
+                config=step_spec.get("config", {}),
+                status="running",
+                started_at=_now(),
+            )
+            session.add(rs)
             await session.commit()
 
-        ctx = StepContext(
-            run_id=run.id,
-            lab=lab_view,
-            experiment=exp_view,
-            step_config=step_spec.get("config", {}),
-            outputs=outputs,
-            agents=agents_view,
-            logger=logging.getLogger(f"iterlab.step.{handler_key}"),
-            checkpoint=_checkpoint,
-        )
-        try:
-            handler = get_step_handler(handler_key)
-            result = await handler.run(ctx)
-        except Exception as err:  # noqa: BLE001
-            logger.exception("run %s step %d (%s) failed", run.id, i, handler_key)
-            rs.status = "failed"
-            rs.error = str(err)
-            rs.output = getattr(err, "output", None) or None
+            async def _checkpoint(partial: dict, _rs: RunStep = rs) -> None:
+                _rs.output = {**(_rs.output or {}), **partial}
+                sid = partial.get("agent_session_id") or partial.get("conversation_id")
+                if sid:
+                    run.agent_session_id = sid
+                await session.commit()
+
+            ctx = StepContext(
+                run_id=run.id,
+                lab=lab_view,
+                experiment=exp_view,
+                step_config=step_spec.get("config", {}),
+                iteration=it,
+                outputs=iter_outputs,
+                history=history[:it],
+                agent_session_id=run.agent_session_id,
+                agents=agents_view,
+                logger=logging.getLogger(f"iterlab.step.{handler_key}"),
+                checkpoint=_checkpoint,
+            )
+            try:
+                result = await get_step_handler(handler_key).run(ctx)
+            except Exception as err:  # noqa: BLE001
+                logger.exception("run %s [%d.%d %s] failed", run.id, it, pos, handler_key)
+                rs.status = "failed"
+                rs.error = str(err)
+                rs.output = getattr(err, "output", None) or None
+                rs.finished_at = _now()
+                sid = getattr(err, "agent_session_id", None) if isinstance(err, StepError) else None
+                if sid:
+                    run.agent_session_id = sid
+                run.status = RunStatus.failed
+                run.error = f"iteration {it} step {pos} ({handler_key}): {err}"
+                run.finished_at = _now()
+                run.context = {**ctx_state, "iterations": iterations}
+                await session.commit()
+                return run
+
+            rs.status = "succeeded"
+            rs.output = result.output
             rs.finished_at = _now()
-            sid = getattr(err, "agent_session_id", None) if isinstance(err, StepError) else None
-            if sid:
-                run.agent_session_id = sid
-            run.status = RunStatus.failed
-            run.error = f"step {i} ({handler_key}): {err}"
-            run.finished_at = _now()
-            if rs.output:
-                outputs[handler_key] = rs.output
-            run.context = outputs
+            iter_outputs[handler_key] = result.output
+
+            if result.agent_session_id:
+                run.agent_session_id = result.agent_session_id
+            if result.summary:
+                run.summary = result.summary
+            if result.candidate is not None or result.benchmarks:
+                cand = await _candidate_for(session, run, it)
+                if result.candidate is not None:
+                    _apply_candidate(cand, result.candidate)
+                for outcome in result.benchmarks:
+                    await _record_benchmark(session, lab.id, run, cand, outcome)
+
             await session.commit()
-            return run
+            logger.info("run %s [%d.%d %s] ok", run.id, it, pos, handler_key)
 
-        rs.status = "succeeded"
-        rs.output = result.output
-        rs.finished_at = _now()
-        outputs[handler_key] = result.output
-        outputs[str(i)] = result.output
-
-        if result.agent_session_id:
-            run.agent_session_id = result.agent_session_id
-        if result.summary:
-            run.summary = result.summary
-        if result.candidate is not None:
-            candidate = await _upsert_candidate(session, run, candidate, result.candidate)
-        for outcome in result.benchmarks:
-            await _record_benchmark(session, lab.id, run, candidate, outcome)
-
-        run.context = outputs
+        history[it] = iter_outputs
+        done_cand = await session.scalar(
+            select(Candidate).where(Candidate.run_id == run.id, Candidate.iteration == it)
+        )
+        if done_cand is not None:
+            done_cand.status = CandidateStatus.evaluated
+        run.context = {
+            "iterations": iterations,
+            "iterations_done": it + 1,
+            "agent_session_id": run.agent_session_id,
+        }
         await session.commit()
-        logger.info("run %s step %d (%s) ok", run.id, i, handler_key)
 
     run.status = RunStatus.succeeded
     run.finished_at = _now()
-    run.context = outputs
-    if candidate is not None:
-        candidate.status = CandidateStatus.evaluated
     await session.commit()
-    logger.info("run %s: done", run.id)
+    logger.info("run %s: done (%d candidate iteration(s))", run.id, iterations)
     return run

@@ -333,6 +333,7 @@ export interface Run {
 
 export interface RunStep {
   id: string;
+  iteration: number;
   position: number;
   handler: string;
   name: string | null;
@@ -353,16 +354,18 @@ export interface Candidate {
   score: number | null;
   cost_usd: number | null;
   tokens: number | null;
-  extra: Record<string, unknown>;
+  extra: Record<string, unknown> & { name?: string };
 }
 
 export interface RunListItem extends Run {
-  candidate: Candidate | null;
+  candidates: Candidate[];
+  steps: RunStep[];
   context: Record<string, unknown>;
 }
 
-export interface RunDetail extends RunListItem {
+export interface RunDetail extends Run {
   steps: RunStep[];
+  candidates: Candidate[];
   benchmark_results: Array<{
     id: string;
     benchmark_id: string;
@@ -371,6 +374,7 @@ export interface RunDetail extends RunListItem {
     details: Record<string, unknown>;
     created_at: string;
   }>;
+  context: Record<string, unknown>;
 }
 
 export const listExperiments = (labId: string) =>
