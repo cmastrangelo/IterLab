@@ -13,6 +13,7 @@ from iterlab.runs.executor import execute_run
 from iterlab.workflows.base import (
     BenchmarkOutcome,
     CandidateInfo,
+    PromptRef,
     StepContext,
     StepError,
     StepHandler,
@@ -75,6 +76,21 @@ class _IterBench(StepHandler):
         )
 
 
+class _PromptAgent(StepHandler):
+    """Emits a versioned prompt whose template is controlled by step config."""
+
+    key = "test_prompt_agent"
+
+    async def run(self, ctx: StepContext) -> StepResult:
+        template = ctx.step_config.get("template", "base template {x}")
+        slug = ctx.step_config.get("slug", "initial")
+        return StepResult(
+            output={"iteration": ctx.iteration},
+            candidate=CandidateInfo(name=f"sol_{ctx.iteration}.py", score=60.0),
+            prompt=PromptRef(slug=slug, template=template, rendered=template),
+        )
+
+
 class _Boom(StepHandler):
     key = "test_boom"
 
@@ -84,13 +100,15 @@ class _Boom(StepHandler):
         )
 
 
-for h in (_MakeSolution, _Bench, _Boom, _IterAgent, _IterBench):
+for h in (_MakeSolution, _Bench, _Boom, _IterAgent, _IterBench, _PromptAgent):
     register_step_handler(h)
 
 
-async def _lab_with_workflow(steps: list[StepSpec], iterations: int = 1) -> tuple[str, str]:
+async def _lab_with_workflow(
+    steps: list[StepSpec], iterations: int = 1, slug: str = "run-lab"
+) -> tuple[str, str]:
     spec = LabSpec(
-        slug="run-lab",
+        slug=slug,
         name="Run Lab",
         project_slug="run-proj",
         benchmarks=[BenchmarkSpec(slug="board", name="Board", adapter="sql_leaderboard")],
@@ -184,6 +202,45 @@ async def test_iteration_loop_produces_a_candidate_per_iteration(client: AsyncCl
         if s["iteration"] == 2 and s["handler"] == "test_iter_agent"
     )
     assert iter2_agent["output"]["saw_prior_score"] == 53.0
+
+
+async def test_prompt_versions_are_recorded_and_deduped(client: AsyncClient) -> None:
+    headers = await _auth(client)
+
+    async def _run(exp_id: str) -> str:
+        run = (await client.post(f"/experiments/{exp_id}/runs", headers=headers)).json()
+        async with get_sessionmaker()() as session:
+            await execute_run(session, uuid.UUID(run["id"]))
+        return run["id"]
+
+    # lab A: two runs, same template -> a single v0
+    lab_a, exp_a = await _lab_with_workflow(
+        [StepSpec(handler="test_prompt_agent", config={"template": "climb the ladder {x}"})],
+        slug="prompt-lab-a",
+    )
+    await _run(exp_a)
+    await _run(exp_a)
+    rows = (await client.get(f"/labs/{lab_a}/prompts", headers=headers)).json()
+    assert [(r["slug"], r["version"]) for r in rows] == [("initial", 0)]
+    assert rows[0]["uses"] == 2
+    assert rows[0]["scored"] == 2
+    assert rows[0]["best_score"] == 60.0
+
+    # a different lab keeps its own prompt version space
+    lab_b, exp_b = await _lab_with_workflow(
+        [StepSpec(handler="test_prompt_agent", config={"template": "v-one {x}"})],
+        slug="prompt-lab-b",
+    )
+    rows_b0 = (await client.get(f"/labs/{lab_b}/prompts", headers=headers)).json()
+    assert rows_b0 == []
+    await _run(exp_b)
+    rows_b = (await client.get(f"/labs/{lab_b}/prompts", headers=headers)).json()
+    assert [(r["slug"], r["version"]) for r in rows_b] == [("initial", 0)]
+
+    # candidate carries the prompt_version it was produced under
+    run_id = (await client.get(f"/experiments/{exp_a}/runs", headers=headers)).json()
+    detail = (await client.get(f"/runs/{run_id[0]['id']}", headers=headers)).json()
+    assert detail["candidates"][0]["extra"]["prompt_version"] == 0
 
 
 async def test_run_requires_workflow(client: AsyncClient) -> None:
