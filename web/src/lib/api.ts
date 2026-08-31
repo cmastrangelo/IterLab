@@ -259,6 +259,8 @@ export type AgentKind = "cli" | "api";
 
 export interface CliConfig {
   command: string;
+  flavor: string; // "claude" | "codex" | "opencode" | "generic"
+  model: string | null; // CLI model id, e.g. "openrouter/z-ai/glm-5.2"
   args: string[];
   working_dir: string | null;
   env: Record<string, string>;

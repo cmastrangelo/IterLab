@@ -10,6 +10,19 @@ command: claude
 args: []
 working_dir: null
 
+# --- CLI agent driving opencode against a specific model (put in its own file) ---
+# `flavor: opencode` teaches IterLab how to run `opencode run` headlessly and
+# resume its sessions. `model` is opencode's "provider/model" string and is
+# pinned here, so you can add several opencode agents that differ only by model.
+# slug: opencode-glm
+# name: opencode · GLM-5.2
+# kind: cli
+# command: opencode
+# flavor: opencode
+# model: openrouter/z-ai/glm-5.2   # hosted via OpenRouter…
+# # model: ollama/qwen2.5-coder    # …or an open model served locally, no API
+# args: []
+
 # --- API agent (put in a separate file): a hosted model API ---
 # slug: claude-api
 # name: Claude (API)

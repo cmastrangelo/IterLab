@@ -16,6 +16,7 @@ interface Draft {
   description: string;
   kind: AgentKind;
   command: string;
+  flavor: string;
   args: string;
   working_dir: string;
   provider: string;
@@ -23,11 +24,14 @@ interface Draft {
   credential_env: string;
 }
 
+const CLI_FLAVORS = ["claude", "codex", "opencode", "generic"];
+
 const EMPTY: Draft = {
   name: "",
   description: "",
   kind: "cli",
   command: "claude",
+  flavor: "claude",
   args: "",
   working_dir: "",
   provider: "anthropic",
@@ -41,10 +45,11 @@ function toDraft(a: Agent): Draft {
     description: a.description ?? "",
     kind: a.kind,
     command: a.cli?.command ?? "claude",
+    flavor: a.cli?.flavor ?? "claude",
     args: (a.cli?.args ?? []).join(" "),
     working_dir: a.cli?.working_dir ?? "",
     provider: a.api?.provider ?? "anthropic",
-    model: a.api?.model ?? "",
+    model: a.cli?.model ?? a.api?.model ?? "",
     credential_env: a.api?.credential_env ?? "",
   };
 }
@@ -81,6 +86,8 @@ export default function AgentsPage() {
 
     const cli = {
       command: draft.command.trim() || "claude",
+      flavor: draft.flavor,
+      model: draft.model.trim() || null,
       args: draft.args.trim() ? draft.args.trim().split(/\s+/) : [],
       working_dir: draft.working_dir.trim() || null,
     };
@@ -153,7 +160,11 @@ export default function AgentsPage() {
                     {a.managed && <span className="chip">managed</span>}
                     <span className="agent-detail">
                       {a.kind === "cli"
-                        ? `${a.cli?.command} ${(a.cli?.args ?? []).join(" ")}`.trim()
+                        ? `${a.cli?.command}${
+                            a.cli?.flavor && a.cli.flavor !== "claude"
+                              ? ` (${a.cli.flavor})`
+                              : ""
+                          }${a.cli?.model ? ` · ${a.cli.model}` : ""}`.trim()
                         : `${a.api?.provider}${a.api?.model ? ` · ${a.api.model}` : ""}`}
                     </span>
                   </button>
@@ -223,6 +234,25 @@ export default function AgentsPage() {
                     id="a-cmd"
                     value={draft.command}
                     onChange={(e) => setDraft({ ...draft, command: e.target.value })}
+                  />
+                  <label htmlFor="a-flavor">Flavor</label>
+                  <select
+                    id="a-flavor"
+                    value={draft.flavor}
+                    onChange={(e) => setDraft({ ...draft, flavor: e.target.value })}
+                  >
+                    {CLI_FLAVORS.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="a-cli-model">Model (optional)</label>
+                  <input
+                    id="a-cli-model"
+                    value={draft.model}
+                    placeholder="openrouter/z-ai/glm-5.2"
+                    onChange={(e) => setDraft({ ...draft, model: e.target.value })}
                   />
                   <label htmlFor="a-args">Args (space-separated)</label>
                   <input

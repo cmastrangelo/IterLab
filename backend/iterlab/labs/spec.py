@@ -40,11 +40,12 @@ class AgentSpec(BaseModel):
     kind: str  # "cli" | "api"
     # cli
     command: str = "claude"
-    flavor: str = "claude"  # "claude" | "codex" | "generic"
+    flavor: str = "claude"  # "claude" | "codex" | "opencode" | "generic"
     args: list[str] = Field(default_factory=list)
     working_dir: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
-    # api
+    # api — and, for cli, the model identifier passed to the CLI (opencode's
+    # "provider/model", e.g. "openrouter/z-ai/glm-5.2" or "ollama/qwen2.5-coder")
     provider: str = "anthropic"
     model: str | None = None
     credential_env: str | None = None

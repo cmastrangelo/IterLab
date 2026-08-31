@@ -28,6 +28,7 @@ async def test_create_cli_agent(client: AsyncClient) -> None:
     assert body["cli"] == {
         "command": "claude",
         "flavor": "claude",
+        "model": None,
         "args": ["-p"],
         "working_dir": "/repo",
         "env": {},
@@ -45,6 +46,27 @@ async def test_create_cli_agent_with_flavor(client: AsyncClient) -> None:
     )
     assert resp.status_code == 201, resp.text
     assert resp.json()["cli"]["flavor"] == "codex"
+
+
+async def test_create_cli_agent_with_model(client: AsyncClient) -> None:
+    headers = await _auth(client, "ocmodel@example.com")
+    resp = await client.post(
+        "/agents",
+        headers=headers,
+        json={
+            "name": "opencode glm",
+            "kind": "cli",
+            "cli": {
+                "command": "opencode",
+                "flavor": "opencode",
+                "model": "openrouter/z-ai/glm-5.2",
+            },
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    cli = resp.json()["cli"]
+    assert cli["flavor"] == "opencode"
+    assert cli["model"] == "openrouter/z-ai/glm-5.2"
 
 
 async def test_create_api_agent_defaults_and_credential_ref(client: AsyncClient) -> None:

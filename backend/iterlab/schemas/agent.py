@@ -15,7 +15,11 @@ class CliConfig(BaseModel):
     # how the CLI is driven headlessly (prompt/session/resume flags, output
     # parsing). "generic" just runs `command args prompt`. Consumers that need
     # session continuity look at this.
-    flavor: str = "claude"  # "claude" | "codex" | "generic"
+    flavor: str = "claude"  # "claude" | "codex" | "opencode" | "generic"
+    # model identifier passed to the CLI (e.g. opencode's "provider/model" like
+    # "openrouter/z-ai/glm-5.2", or "ollama/qwen2.5-coder" for a local model).
+    # Lets several agents share one CLI while each pins its own model.
+    model: str | None = None
     args: list[str] = Field(default_factory=list)
     working_dir: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
