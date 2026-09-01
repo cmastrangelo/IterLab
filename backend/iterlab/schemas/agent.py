@@ -20,6 +20,9 @@ class CliConfig(BaseModel):
     # "openrouter/z-ai/glm-5.2", or "ollama/qwen2.5-coder" for a local model).
     # Lets several agents share one CLI while each pins its own model.
     model: str | None = None
+    # model variant / reasoning effort (opencode's --variant, e.g. "max", "high",
+    # "minimal"). Ignored by flavors that don't support it.
+    variant: str | None = None
     args: list[str] = Field(default_factory=list)
     working_dir: str | None = None
     env: dict[str, str] = Field(default_factory=dict)

@@ -158,6 +158,7 @@ async def sync_agent(session: AsyncSession, spec: AgentSpec) -> Agent:
             "command": spec.command,
             "flavor": spec.flavor,
             "model": spec.model,
+            "variant": spec.variant,
             "args": spec.args,
             "working_dir": spec.working_dir,
             "env": spec.env,

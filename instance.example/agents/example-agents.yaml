@@ -21,6 +21,7 @@ working_dir: null
 # flavor: opencode
 # model: openrouter/z-ai/glm-5.2   # hosted via OpenRouter…
 # # model: ollama/qwen2.5-coder    # …or an open model served locally, no API
+# variant: max                     # optional: opencode --variant (reasoning effort)
 # args: []
 
 # --- API agent (put in a separate file): a hosted model API ---

@@ -48,6 +48,8 @@ class AgentSpec(BaseModel):
     # "provider/model", e.g. "openrouter/z-ai/glm-5.2" or "ollama/qwen2.5-coder")
     provider: str = "anthropic"
     model: str | None = None
+    # cli only: model variant / reasoning effort (opencode --variant, e.g. "max")
+    variant: str | None = None
     credential_env: str | None = None
     params: dict = Field(default_factory=dict)
 

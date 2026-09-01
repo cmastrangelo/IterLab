@@ -17,6 +17,7 @@ interface Draft {
   kind: AgentKind;
   command: string;
   flavor: string;
+  variant: string;
   args: string;
   working_dir: string;
   provider: string;
@@ -32,6 +33,7 @@ const EMPTY: Draft = {
   kind: "cli",
   command: "claude",
   flavor: "claude",
+  variant: "",
   args: "",
   working_dir: "",
   provider: "anthropic",
@@ -46,6 +48,7 @@ function toDraft(a: Agent): Draft {
     kind: a.kind,
     command: a.cli?.command ?? "claude",
     flavor: a.cli?.flavor ?? "claude",
+    variant: a.cli?.variant ?? "",
     args: (a.cli?.args ?? []).join(" "),
     working_dir: a.cli?.working_dir ?? "",
     provider: a.api?.provider ?? "anthropic",
@@ -88,6 +91,7 @@ export default function AgentsPage() {
       command: draft.command.trim() || "claude",
       flavor: draft.flavor,
       model: draft.model.trim() || null,
+      variant: draft.variant.trim() || null,
       args: draft.args.trim() ? draft.args.trim().split(/\s+/) : [],
       working_dir: draft.working_dir.trim() || null,
     };
@@ -164,7 +168,9 @@ export default function AgentsPage() {
                             a.cli?.flavor && a.cli.flavor !== "claude"
                               ? ` (${a.cli.flavor})`
                               : ""
-                          }${a.cli?.model ? ` · ${a.cli.model}` : ""}`.trim()
+                          }${a.cli?.model ? ` · ${a.cli.model}` : ""}${
+                            a.cli?.variant ? ` [${a.cli.variant}]` : ""
+                          }`.trim()
                         : `${a.api?.provider}${a.api?.model ? ` · ${a.api.model}` : ""}`}
                     </span>
                   </button>
@@ -253,6 +259,13 @@ export default function AgentsPage() {
                     value={draft.model}
                     placeholder="openrouter/z-ai/glm-5.2"
                     onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+                  />
+                  <label htmlFor="a-variant">Variant / reasoning effort (optional)</label>
+                  <input
+                    id="a-variant"
+                    value={draft.variant}
+                    placeholder="max · high · minimal (opencode)"
+                    onChange={(e) => setDraft({ ...draft, variant: e.target.value })}
                   />
                   <label htmlFor="a-args">Args (space-separated)</label>
                   <input
