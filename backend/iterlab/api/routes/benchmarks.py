@@ -38,7 +38,11 @@ async def benchmark_leaderboard(
 ) -> Leaderboard:
     bench = await _get_benchmark(session, benchmark_id)
     adapter = get_adapter(bench.adapter)
-    ctx = BenchmarkContext(spec={**bench.spec, "_slug": bench.slug})
+    ctx = BenchmarkContext(
+        spec={**bench.spec, "_slug": bench.slug},
+        lab_id=bench.lab_id,
+        session=session,
+    )
     try:
         return await adapter.leaderboard(ctx)
     except BenchmarkError as err:
@@ -51,6 +55,10 @@ async def benchmark_health(
 ) -> dict:
     bench = await _get_benchmark(session, benchmark_id)
     adapter = get_adapter(bench.adapter)
-    ctx = BenchmarkContext(spec={**bench.spec, "_slug": bench.slug})
+    ctx = BenchmarkContext(
+        spec={**bench.spec, "_slug": bench.slug},
+        lab_id=bench.lab_id,
+        session=session,
+    )
     ok, detail = await adapter.health(ctx)
     return {"ok": ok, "detail": detail, "adapter": bench.adapter}

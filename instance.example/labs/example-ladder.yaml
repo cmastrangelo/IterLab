@@ -38,3 +38,23 @@ benchmarks:
         - { key: win_pct, label: "Win %", kind: percent, primary: true }
         - { key: rating, label: "Rating", kind: number }
         - { key: games, label: "Games", kind: integer }
+
+  # Rank this lab's candidates by a label a human records after the fact
+  # (e.g. a real competition placement). No external DB — reads Candidate.labels.
+  - slug: external-rank
+    name: External ranking
+    description: Manually-recorded outcome per candidate; ranked here.
+    adapter: candidate_labels
+    primary_metric: placement
+    higher_is_better: false
+    spec:
+      label_key: placement          # which key in Candidate.labels to use
+      title: "External ranking"
+      value_label: Placement
+      sort: tiered                  # numeric (default) | tiered | lexical
+      tiers: [Legend, Gold, Silver, Bronze]   # best -> worst; tiered only
+      within_tier_order: asc        # lower number = better inside a tier
+      # order: asc                   # numeric/lexical: asc = smaller is better
+      # baseline_names: [main]
+      # extra_entrants:              # fixed reference rows (no candidate needed)
+      #   - { entrant: main, value: "Gold 200", baseline: true }

@@ -192,9 +192,18 @@ instance/
 
 Copy `instance.example/` to `instance/` and edit. On startup each
 `labs/*.yaml` is upserted as a `source: instance` lab; its benchmarks are
-created read-only. A benchmark names a **BenchmarkAdapter** (`sql_leaderboard`
-is built in — a ranked leaderboard from an arbitrary SQL query) plus a `spec`
-that references secrets by env-var name only, never inline.
+created read-only. A benchmark names a **BenchmarkAdapter** plus a `spec`.
+Built-in adapters:
+
+- `sql_leaderboard` — a ranked leaderboard from an arbitrary SQL query against
+  an external database (DSN by env-var reference, never inline).
+- `candidate_labels` — ranks the lab's own candidates by a manually-recorded
+  label (e.g. a competition placement or human-eval grade attached via
+  `PATCH /candidates/{id}`). Supports numeric / tiered / lexical ordering and
+  fixed reference rows.
+
+Deployment-specific adapters live in `instance/adapters/*.py` and register
+themselves at startup.
 
 ## Contributing
 

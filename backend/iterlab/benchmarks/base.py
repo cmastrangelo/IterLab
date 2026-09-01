@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import abc
 import os
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class LeaderboardColumn(BaseModel):
@@ -44,9 +48,15 @@ class BenchmarkContext:
     ``"SOMENAME_env"`` style reference in the spec into the actual value, read
     from the process environment (which the instance ``.env`` populates). This
     keeps real DSNs / credentials out of the database and the repo.
+
+    ``lab_id`` / ``session`` are populated for adapters that rank IterLab's own
+    data (e.g. candidates) rather than an external table. Adapters that only talk
+    to an external DSN ignore them.
     """
 
     spec: dict[str, Any]
+    lab_id: uuid.UUID | None = None
+    session: AsyncSession | None = None
 
     def resolve_secret(self, ref: str | None, *, required: bool = True) -> str | None:
         if not ref:
@@ -59,6 +69,15 @@ class BenchmarkContext:
                 f"environment variable {ref!r} is not set (expected via instance .env)"
             )
         return value
+
+    def require_db(self) -> tuple[uuid.UUID, AsyncSession]:
+        """For adapters that rank IterLab's own data."""
+        if self.lab_id is None or self.session is None:
+            raise BenchmarkConfigError(
+                "this benchmark adapter needs IterLab database access "
+                "(lab_id + session); it can only run via the API"
+            )
+        return self.lab_id, self.session
 
 
 class BenchmarkError(RuntimeError):
