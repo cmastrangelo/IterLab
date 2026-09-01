@@ -11,6 +11,13 @@ class RunCreate(BaseModel):
     iterations: int | None = Field(default=None, ge=1, le=50)
     # override the agent used by any step whose config has an "agent" key
     agent: str | None = None
+    # spend ceiling for this run; the executor pauses at it. Omit for the default.
+    cost_budget_usd: float | None = Field(default=None, ge=0)
+
+
+class RunResume(BaseModel):
+    # USD to add to a paused run's ceiling before re-queuing it
+    additional_usd: float = Field(default=2.0, gt=0, le=1000)
 
 
 class ExperimentOut(BaseModel):

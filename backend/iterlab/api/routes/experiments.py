@@ -12,6 +12,7 @@ from iterlab.models.candidate import Candidate
 from iterlab.models.enums import RunStatus
 from iterlab.models.experiment import Experiment, Run
 from iterlab.models.run_step import RunStep
+from iterlab.runs.executor import DEFAULT_RUN_BUDGET_USD
 from iterlab.schemas.experiment import (
     BenchmarkResultOut,
     CandidateOut,
@@ -21,6 +22,7 @@ from iterlab.schemas.experiment import (
     RunDetailOut,
     RunListItemOut,
     RunOut,
+    RunResume,
     RunStepOut,
 )
 
@@ -116,7 +118,12 @@ async def create_run(
     last = await session.scalar(
         select(Run).where(Run.experiment_id == exp.id).order_by(Run.iteration.desc()).limit(1)
     )
-    run_context: dict = {"iterations": iterations}
+    budget = (
+        body.cost_budget_usd
+        if body and body.cost_budget_usd is not None
+        else DEFAULT_RUN_BUDGET_USD
+    )
+    run_context: dict = {"iterations": iterations, "cost_budget_usd": budget}
     if body and body.agent:
         run_context["agent_override"] = body.agent
     run = Run(
@@ -171,6 +178,35 @@ async def retry_run(run_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
         raise NotFoundError("run not found")
     if str(run.status) not in {"failed", "cancelled", "lost"}:
         raise APIError(f"run is {run.status}, not retryable", code="not_retryable")
+    run.status = RunStatus.pending
+    run.error = None
+    run.finished_at = None
+    await session.flush()
+    return run
+
+
+@runs.post(
+    "/{run_id}/resume",
+    response_model=RunOut,
+    summary="Resume a paused run: raise its cost ceiling and re-queue it",
+)
+async def resume_run(
+    run_id: uuid.UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    body: RunResume | None = None,
+) -> Run:
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise NotFoundError("run not found")
+    if str(run.status) != "paused":
+        raise APIError(f"run is {run.status}, not paused", code="not_paused")
+    add = body.additional_usd if body else 2.0
+    ctx = dict(run.context or {})
+    current = float(ctx.get("cost_budget_usd") or DEFAULT_RUN_BUDGET_USD)
+    ctx["cost_budget_usd"] = round(current + add, 4)
+    ctx.pop("paused_reason", None)
+    run.context = ctx
     run.status = RunStatus.pending
     run.error = None
     run.finished_at = None

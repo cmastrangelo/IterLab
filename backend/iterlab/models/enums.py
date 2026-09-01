@@ -7,6 +7,7 @@ class RunStatus(enum.StrEnum):
     pending = "pending"
     scheduled = "scheduled"
     running = "running"
+    paused = "paused"        # hit its cost cap; resume to raise the cap + continue
     succeeded = "succeeded"
     failed = "failed"
     cancelled = "cancelled"

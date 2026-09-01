@@ -91,6 +91,19 @@ class _PromptAgent(StepHandler):
         )
 
 
+class _CostAgent(StepHandler):
+    """Agent step that reports a fixed USD cost per iteration."""
+
+    key = "test_cost_agent"
+
+    async def run(self, ctx: StepContext) -> StepResult:
+        per = float(ctx.step_config.get("cost", 0.4))
+        return StepResult(
+            output={"iteration": ctx.iteration, "cost_usd": per},
+            candidate=CandidateInfo(name=f"sol_{ctx.iteration}.py", cost_usd=per),
+        )
+
+
 class _Boom(StepHandler):
     key = "test_boom"
 
@@ -100,7 +113,7 @@ class _Boom(StepHandler):
         )
 
 
-for h in (_MakeSolution, _Bench, _Boom, _IterAgent, _IterBench, _PromptAgent):
+for h in (_MakeSolution, _Bench, _Boom, _IterAgent, _IterBench, _PromptAgent, _CostAgent):
     register_step_handler(h)
 
 
@@ -241,6 +254,59 @@ async def test_prompt_versions_are_recorded_and_deduped(client: AsyncClient) -> 
     run_id = (await client.get(f"/experiments/{exp_a}/runs", headers=headers)).json()
     detail = (await client.get(f"/runs/{run_id[0]['id']}", headers=headers)).json()
     assert detail["candidates"][0]["extra"]["prompt_version"] == 0
+
+
+async def test_cost_cap_pauses_run_and_resume_continues(client: AsyncClient) -> None:
+    headers = await _auth(client)
+    _lab_id, exp_id = await _lab_with_workflow(
+        [StepSpec(handler="test_cost_agent", config={"cost": 0.4})],
+        iterations=4,
+        slug="cost-lab",
+    )
+    run = (
+        await client.post(
+            f"/experiments/{exp_id}/runs",
+            headers=headers,
+            json={"iterations": 4, "cost_budget_usd": 1.0},
+        )
+    ).json()
+
+    async with get_sessionmaker()() as session:
+        await execute_run(session, uuid.UUID(run["id"]))
+
+    detail = (await client.get(f"/runs/{run['id']}", headers=headers)).json()
+    # 0.4 * 3 = 1.2 >= 1.0 cap -> pauses before iteration 3's step
+    assert detail["status"] == "paused"
+    assert detail["context"]["spent_usd"] == 1.2
+    assert detail["context"]["iterations_done"] == 3
+    assert detail["context"]["cost_budget_usd"] == 1.0
+    assert "cost cap" in detail["context"]["paused_reason"]
+    assert len(detail["candidates"]) == 3
+
+    # resume: default +$2 ceiling -> 3.0, run finishes
+    resumed = await client.post(f"/runs/{run['id']}/resume", headers=headers)
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["status"] == "pending"
+
+    async with get_sessionmaker()() as session:
+        await execute_run(session, uuid.UUID(run["id"]))
+
+    detail = (await client.get(f"/runs/{run['id']}", headers=headers)).json()
+    assert detail["status"] == "succeeded"
+    assert detail["context"]["spent_usd"] == 1.6
+    assert detail["context"]["cost_budget_usd"] == 3.0
+    assert len(detail["candidates"]) == 4
+
+
+async def test_resume_rejects_non_paused_run(client: AsyncClient) -> None:
+    headers = await _auth(client)
+    _lab_id, exp_id = await _lab_with_workflow(
+        [StepSpec(handler="test_cost_agent")], slug="cost-lab-2"
+    )
+    run = (await client.post(f"/experiments/{exp_id}/runs", headers=headers)).json()
+    resp = await client.post(f"/runs/{run['id']}/resume", headers=headers)
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "not_paused"
 
 
 async def test_run_requires_workflow(client: AsyncClient) -> None:

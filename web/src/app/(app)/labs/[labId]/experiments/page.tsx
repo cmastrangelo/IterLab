@@ -8,6 +8,7 @@ import {
   getRun,
   listExperiments,
   listRuns,
+  resumeRun,
   retryRun,
   type RunDetail,
   type RunListItem,
@@ -17,8 +18,26 @@ import { RunChart } from "./run-chart";
 
 const ACTIVE = new Set(["pending", "scheduled", "running"]);
 
+interface RunBudget {
+  spent_usd?: number;
+  cost_budget_usd?: number;
+  paused_reason?: string;
+}
+
 function StatusPill({ status }: { status: string }) {
   return <span className={`run-status run-${status}`}>{status}</span>;
+}
+
+function BudgetNote({ ctx }: { ctx: RunBudget }) {
+  if (typeof ctx.spent_usd !== "number" || typeof ctx.cost_budget_usd !== "number") {
+    return null;
+  }
+  const over = ctx.spent_usd >= ctx.cost_budget_usd;
+  return (
+    <span className={`budget-note${over ? " over" : ""}`}>
+      ${ctx.spent_usd.toFixed(2)} / ${ctx.cost_budget_usd.toFixed(2)} cap
+    </span>
+  );
 }
 
 function RunDetailBlock({ runId }: { runId: string }) {
@@ -37,8 +56,24 @@ function RunDetailBlock({ runId }: { runId: string }) {
 
   if (!run) return null;
 
+  const ctx = (run.context ?? {}) as RunBudget;
+
   return (
     <div className="run-detail">
+      {run.status === "paused" && (
+        <div className="pause-banner">
+          <span>
+            ⏸ {ctx.paused_reason ?? "paused at cost cap"}
+          </span>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => resumeRun(run.id).then(load)}
+          >
+            Resume (+$2)
+          </button>
+        </div>
+      )}
       {run.error && (
         <p className="error mono">
           {run.error}{" "}
@@ -154,7 +189,8 @@ export default function ExperimentsTab() {
         </ol>
         <p className="muted hint">
           A run is queued <code>pending</code>. Execute it on a host with the agent
-          CLI + repo checkout: <code>iterlab-runner --once</code>.
+          CLI + repo checkout: <code>iterlab-runner --once</code>. A run pauses at a{" "}
+          <strong>$2.00</strong> spend cap; resume it to add budget and continue.
         </p>
       </section>
 
@@ -188,7 +224,28 @@ export default function ExperimentsTab() {
                       <StatusPill status={r.status} />
                     </td>
                     <td colSpan={6} className="muted">
-                      {r.summary ?? (open === r.id ? "" : "click to expand")}
+                      {r.status === "paused" ? (
+                        <span className="pause-inline">
+                          <BudgetNote ctx={r.context as RunBudget} />{" "}
+                          <button
+                            type="button"
+                            className="link-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              resumeRun(r.id).then(
+                                () => experiment && refreshRuns(experiment.id),
+                              );
+                            }}
+                          >
+                            resume (+$2)
+                          </button>
+                        </span>
+                      ) : (
+                        <>
+                          {r.summary ?? (open === r.id ? "" : "click to expand")}{" "}
+                          <BudgetNote ctx={r.context as RunBudget} />
+                        </>
+                      )}
                     </td>
                   </tr>
                   {[...r.candidates]

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import uuid
 from datetime import UTC, datetime
 
@@ -39,9 +40,32 @@ from iterlab.workflows.registry import get_step_handler
 
 logger = logging.getLogger("iterlab.runs")
 
+# Per-run spend ceiling. When a run's accumulated step cost reaches this, the
+# executor pauses it (status "paused") rather than starting the next step.
+# Resuming raises the ceiling. Overridable per run via context["cost_budget_usd"].
+DEFAULT_RUN_BUDGET_USD = float(os.environ.get("ITERLAB_RUN_BUDGET_USD", "2.0"))
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _step_cost(output: dict | None) -> float:
+    """USD an agent step reported for itself (0 when it reports none)."""
+    if not output:
+        return 0.0
+    val = output.get("cost_usd")
+    return float(val) if isinstance(val, (int, float)) else 0.0
+
+
+async def _run_spend(session: AsyncSession, run_id: uuid.UUID) -> float:
+    """Total USD across this run's finished steps."""
+    rows = await session.scalars(
+        select(RunStep.output).where(
+            RunStep.run_id == run_id, RunStep.status == "succeeded"
+        )
+    )
+    return round(sum(_step_cost(o) for o in rows), 6)
 
 
 def _apply_candidate(cand: Candidate, info: CandidateInfo) -> None:
@@ -147,6 +171,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
     steps: list[dict] = [dict(s) for s in workflow.get("steps", [])]
     ctx_state = dict(run.context or {})
     iterations = int(ctx_state.get("iterations") or workflow.get("iterations", 1))
+    budget = float(ctx_state.get("cost_budget_usd") or DEFAULT_RUN_BUDGET_USD)
 
     # per-run agent override: applied to any step whose config names an agent
     agent_override = ctx_state.get("agent_override")
@@ -206,6 +231,31 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                 logger.info("run %s [%d.%d %s]: done, skipping", run.id, it, pos, handler_key)
                 continue
 
+            # cost cap: stop before starting a step that would spend beyond the
+            # ceiling. Resuming (POST /runs/{id}/resume) raises it and re-queues.
+            spent = await _run_spend(session, run.id)
+            if budget and spent >= budget:
+                logger.info(
+                    "run %s: paused — spent $%.4f of $%.2f cap (before %d.%d %s)",
+                    run.id, spent, budget, it, pos, handler_key,
+                )
+                run.status = RunStatus.paused
+                run.finished_at = None
+                run.context = {
+                    **ctx_state,
+                    "iterations": iterations,
+                    "iterations_done": it,
+                    "cost_budget_usd": budget,
+                    "spent_usd": spent,
+                    "paused_reason": (
+                        f"cost cap ${budget:.2f} reached (${spent:.2f} spent); "
+                        "resume to add budget and continue"
+                    ),
+                    "agent_session_id": run.agent_session_id,
+                }
+                await session.commit()
+                return run
+
             rs = RunStep(
                 run_id=run.id,
                 iteration=it,
@@ -253,7 +303,12 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                 run.status = RunStatus.failed
                 run.error = f"iteration {it} step {pos} ({handler_key}): {err}"
                 run.finished_at = _now()
-                run.context = {**ctx_state, "iterations": iterations}
+                run.context = {
+                    **ctx_state,
+                    "iterations": iterations,
+                    "cost_budget_usd": budget,
+                    "spent_usd": await _run_spend(session, run.id),
+                }
                 await session.commit()
                 return run
 
@@ -299,12 +354,19 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
             **ctx_state,
             "iterations": iterations,
             "iterations_done": it + 1,
+            "cost_budget_usd": budget,
+            "spent_usd": await _run_spend(session, run.id),
             "agent_session_id": run.agent_session_id,
         }
         await session.commit()
 
     run.status = RunStatus.succeeded
     run.finished_at = _now()
+    run.context = {
+        **(run.context or {}),
+        "spent_usd": await _run_spend(session, run.id),
+        "cost_budget_usd": budget,
+    }
     await session.commit()
     logger.info("run %s: done (%d candidate iteration(s))", run.id, iterations)
     return run

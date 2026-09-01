@@ -394,10 +394,23 @@ export const listExperiments = (labId: string) =>
   apiFetch<Experiment[]>(`/labs/${labId}/experiments`);
 export const listRuns = (experimentId: string) =>
   apiFetch<RunListItem[]>(`/experiments/${experimentId}/runs`);
-export const createRun = (experimentId: string) =>
-  apiFetch<Run>(`/experiments/${experimentId}/runs`, { method: "POST" });
+export interface RunOptions {
+  iterations?: number;
+  agent?: string;
+  cost_budget_usd?: number;
+}
+export const createRun = (experimentId: string, opts: RunOptions = {}) =>
+  apiFetch<Run>(`/experiments/${experimentId}/runs`, {
+    method: "POST",
+    body: JSON.stringify(opts),
+  });
 export const retryRun = (runId: string) =>
   apiFetch<Run>(`/runs/${runId}/retry`, { method: "POST" });
+export const resumeRun = (runId: string, additionalUsd = 2) =>
+  apiFetch<Run>(`/runs/${runId}/resume`, {
+    method: "POST",
+    body: JSON.stringify({ additional_usd: additionalUsd }),
+  });
 export const getRun = (runId: string) => apiFetch<RunDetail>(`/runs/${runId}`);
 
 // --- prompts --------------------------------------------------------

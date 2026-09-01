@@ -173,6 +173,7 @@ All settings are read from environment variables prefixed with `ITERLAB_`
 | `ITERLAB_ACCESS_TOKEN_TTL` | `900` | Access token lifetime (seconds) |
 | `ITERLAB_REFRESH_TOKEN_TTL` | `2592000` | Refresh token lifetime (seconds) |
 | `ITERLAB_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
+| `ITERLAB_RUN_BUDGET_USD` | `2.0` | Per-run spend cap. The executor pauses a run (status `paused`) before starting a step once accumulated agent cost reaches this; resume it from the UI or `POST /runs/{id}/resume` to raise the cap and continue. Override per run with `cost_budget_usd` at dispatch. `0` disables the cap. |
 
 ---
 
