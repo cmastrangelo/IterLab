@@ -431,3 +431,39 @@ export interface Prompt {
 
 export const listLabPrompts = (labId: string) =>
   apiFetch<Prompt[]>(`/labs/${labId}/prompts`);
+
+// --- grades (agents & prompts ranked by frontier contribution) ------
+
+export interface AgentGrade {
+  agent: string;
+  runs: number;
+  candidates: number;
+  avg_score: number;
+  avg_delta: number | null;
+  best_delta: number | null;
+  new_best_rate: number;
+  avg_cost_usd: number | null;
+  last_used: string;
+}
+
+export interface PromptGrade {
+  prompt_id: string;
+  slug: string;
+  version: number;
+  uses: number;
+  basis: string; // "cold start" | "iterate lift" | "mixed" | "—"
+  avg_score: number;
+  avg_delta: number | null;
+  best_delta: number | null;
+  new_best_rate: number;
+  avg_cost_usd: number | null;
+}
+
+export interface LabGrades {
+  agents: AgentGrade[];
+  prompts: PromptGrade[];
+  note: string;
+}
+
+export const getLabGrades = (labId: string) =>
+  apiFetch<LabGrades>(`/labs/${labId}/grades`);

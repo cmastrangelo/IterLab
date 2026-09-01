@@ -824,6 +824,26 @@ table.lb tr.is-candidate td {
 }
 
 /* prompts tab */
+/* grades tab */
+.grades .panel + .panel {
+  margin-top: 16px;
+}
+.grade-group + .grade-group {
+  margin-top: 18px;
+}
+.grade-group h3 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+.delta-pos {
+  color: #15803d;
+  font-weight: 600;
+}
+.delta-neg {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .prompts .panel + .panel {
   margin-top: 16px;
 }
