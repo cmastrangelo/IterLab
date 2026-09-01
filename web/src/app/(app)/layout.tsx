@@ -40,7 +40,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">IterLab</div>
+        <div className="sidebar-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/iterlab-mark.png" alt="" width={26} height={26} />
+          IterLab
+        </div>
 
         <div className="sidebar-section">
           <div className="sidebar-heading">Agents</div>

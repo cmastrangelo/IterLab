@@ -47,7 +47,11 @@ export default function RegisterPage() {
   return (
     <main className="center">
       <form className="card" onSubmit={onSubmit}>
-        <div className="brand">IterLab</div>
+        <div className="brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/iterlab-mark.png" alt="" width={28} height={28} />
+          IterLab
+        </div>
         <p className="subtitle">Create an account</p>
 
         {error && <p className="error">{error}</p>}
