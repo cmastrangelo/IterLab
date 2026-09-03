@@ -54,6 +54,13 @@ class AgentSpec(BaseModel):
     params: dict = Field(default_factory=dict)
 
 
+class PromptBindings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # {prompt_slug: version} — which registered prompt version each line runs.
+    # Text lives in prompts/<lab>/<slug>/v<N>.md; this is the only movable knob.
+    active: dict[str, int] = Field(default_factory=dict)
+
+
 class LabSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     slug: str = Field(pattern=_SLUG)
@@ -65,5 +72,6 @@ class LabSpec(BaseModel):
     repo: RepoSpec = Field(default_factory=RepoSpec)
     settings: dict = Field(default_factory=dict)
     benchmarks: list[BenchmarkSpec] = Field(default_factory=list)
+    prompts: PromptBindings = Field(default_factory=PromptBindings)
     # the lab's experiment workflow (steps run per candidate). Optional.
     workflow: WorkflowSpec | None = None

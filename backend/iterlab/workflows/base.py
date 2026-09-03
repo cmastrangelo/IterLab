@@ -35,6 +35,8 @@ class StepContext:
     agent_session_id: str | None = None
     # agents available to the deployment, keyed by name: {name: {kind, cli|api, ...}}
     agents: dict[str, Any] = field(default_factory=dict)
+    # the lab's active prompt for each line: {slug: {version, text}}
+    prompts: dict[str, Any] = field(default_factory=dict)
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger("iterlab.step"))
     # persist partial progress mid-step (e.g. an agent session id before the
     # agent finishes). Merged into the step's recorded output; an
@@ -52,6 +54,11 @@ class StepContext:
 
     def agent(self, name: str | None) -> dict[str, Any] | None:
         return self.agents.get(name) if name else None
+
+    def prompt(self, slug: str) -> dict[str, Any] | None:
+        """The lab's active prompt for ``slug`` — {"version": int, "text": str},
+        or None if no version is bound."""
+        return self.prompts.get(slug)
 
     async def save(self, output: dict[str, Any]) -> None:
         if self.checkpoint is not None:
@@ -90,11 +97,17 @@ class BenchmarkOutcome:
 
 @dataclass(slots=True)
 class PromptRef:
-    """A prompt template a step used. The executor versions it per (lab, slug)."""
+    """The registered prompt version a step used.
+
+    ``template`` must be the exact text of a registered ``(lab, slug, version)``
+    prompt — the executor resolves it (by version, else by content hash) and
+    never mints a new version. Get it from ``ctx.prompt(slug)``.
+    """
 
     slug: str            # prompt "line", e.g. "initial" / "iterate"
-    template: str        # the versioned text (may contain {placeholders})
+    template: str        # the registered version's text (may contain {placeholders})
     rendered: str | None = None  # what was actually sent, for the record
+    version: int | None = None   # the registered version, when the step knows it
 
 
 @dataclass(slots=True)

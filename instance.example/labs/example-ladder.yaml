@@ -16,6 +16,13 @@ settings:
   baseline: main            # free-form; the lab's reference point
   goal: "improve the thing"
 
+# Which registered prompt version each of this lab's prompt "lines" runs.
+# Text lives in prompts/example-lab/<slug>/v<N>.md and is immutable once
+# registered (see prompts/README.md). This integer is the only movable knob.
+prompts:
+  active:
+    build: 1
+
 benchmarks:
   - slug: ladder
     name: Ladder

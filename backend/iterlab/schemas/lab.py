@@ -29,6 +29,7 @@ class LabOut(BaseModel):
     repo_url: str | None
     repo_default_branch: str
     settings: dict
+    prompt_bindings: dict | None = None
     source: str
     created_at: datetime
 

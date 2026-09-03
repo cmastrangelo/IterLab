@@ -198,6 +198,7 @@ export interface Lab {
   repo_url: string | null;
   repo_default_branch: string;
   settings: Record<string, unknown>;
+  prompt_bindings: Record<string, number> | null; // {slug: active version}
   source: "manual" | "instance";
   created_at: string;
 }

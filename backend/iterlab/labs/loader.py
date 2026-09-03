@@ -20,6 +20,7 @@ from iterlab.models.experiment import Experiment
 from iterlab.models.lab import Lab
 from iterlab.models.project import Project
 from iterlab.models.user import User
+from iterlab.prompts import sync_lab_prompts
 
 logger = logging.getLogger("iterlab.labs")
 
@@ -64,7 +65,9 @@ async def _instance_owner(session: AsyncSession) -> User:
     return user
 
 
-async def sync_lab(session: AsyncSession, spec: LabSpec) -> Lab:
+async def sync_lab(
+    session: AsyncSession, spec: LabSpec, instance_dir: Path | None = None
+) -> Lab:
     owner = await _instance_owner(session)
 
     project = await session.scalar(
@@ -93,6 +96,24 @@ async def sync_lab(session: AsyncSession, spec: LabSpec) -> Lab:
     lab.settings = spec.settings
     lab.source = "instance"
     await session.flush()
+
+    # register immutable prompt version files, then point the lab at the
+    # active version of each line
+    present = await sync_lab_prompts(session, lab, instance_dir)
+    bindings: dict[str, int] = {}
+    for slug, versions in present.items():
+        want = spec.prompts.active.get(slug)
+        if want is not None and want in versions:
+            bindings[slug] = want
+        elif want is not None:
+            logger.error(
+                "lab %s: prompts.active[%s]=%d but v%d is not registered "
+                "(have %s) — leaving %s unbound",
+                lab.slug, slug, want, want, versions, slug,
+            )
+        elif versions:
+            bindings[slug] = versions[-1]  # newest, if the spec didn't say
+    lab.prompt_bindings = bindings
 
     seen: set[str] = set()
     for b in spec.benchmarks:
@@ -178,7 +199,7 @@ async def sync_instance_labs(session: AsyncSession, instance_dir: Path | None) -
         return 0, 0
     lab_specs = load_lab_specs(instance_dir)
     for lab_spec in lab_specs:
-        await sync_lab(session, lab_spec)
+        await sync_lab(session, lab_spec, instance_dir)
     agent_specs = load_agent_specs(instance_dir)
     for agent_spec in agent_specs:
         await sync_agent(session, agent_spec)

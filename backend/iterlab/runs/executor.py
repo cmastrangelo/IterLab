@@ -17,7 +17,7 @@ import os
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iterlab.models.agent import Agent
@@ -106,31 +106,27 @@ async def _candidate_for(session: AsyncSession, run: Run, iteration: int) -> Can
     return cand
 
 
-async def _version_prompt(session: AsyncSession, lab_id: uuid.UUID, ref: PromptRef) -> Prompt:
+async def _resolve_prompt(
+    session: AsyncSession, lab_id: uuid.UUID, ref: PromptRef
+) -> Prompt:
+    """Match a step's PromptRef to an already-registered Prompt row.
+
+    Never creates a version — prompt text is immutable and only registered from
+    version files at sync time. A step that sends unregistered text is a bug.
+    """
+    q = select(Prompt).where(Prompt.lab_id == lab_id, Prompt.slug == ref.slug)
+    if ref.version is not None:
+        p = await session.scalar(q.where(Prompt.version == ref.version))
+        if p is not None:
+            return p
     digest = hashlib.sha256(ref.template.encode()).hexdigest()
-    existing = await session.scalar(
-        select(Prompt).where(
-            Prompt.lab_id == lab_id, Prompt.slug == ref.slug, Prompt.digest == digest
-        )
+    p = await session.scalar(q.where(Prompt.digest == digest))
+    if p is not None:
+        return p
+    raise StepError(
+        f"prompt {ref.slug!r} v{ref.version} is not registered for this lab — "
+        f"add prompts/<lab>/{ref.slug}/v{ref.version}.md and bind it"
     )
-    if existing is not None:
-        return existing
-    max_v = await session.scalar(
-        select(func.max(Prompt.version)).where(
-            Prompt.lab_id == lab_id, Prompt.slug == ref.slug
-        )
-    )
-    prompt = Prompt(
-        lab_id=lab_id,
-        slug=ref.slug,
-        version=0 if max_v is None else max_v + 1,
-        text=ref.template,
-        digest=digest,
-    )
-    session.add(prompt)
-    await session.flush()
-    logger.info("recorded prompt %s v%d for lab %s", ref.slug, prompt.version, lab_id)
-    return prompt
 
 
 async def _record_benchmark(
@@ -236,6 +232,19 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
     agent_rows = await session.scalars(select(Agent))
     agents_view = {a.name: AgentOut.from_model(a).model_dump(mode="json") for a in agent_rows}
 
+    # the lab's active prompt for each line: {slug: {version, text}}
+    prompts_view: dict[str, dict] = {}
+    for slug, version in (lab.prompt_bindings or {}).items():
+        p = await session.scalar(
+            select(Prompt).where(
+                Prompt.lab_id == lab.id, Prompt.slug == slug, Prompt.version == version
+            )
+        )
+        if p is not None:
+            prompts_view[slug] = {"version": p.version, "text": p.text, "id": str(p.id)}
+        else:
+            logger.warning("run %s: bound prompt %s v%s not found", run.id, slug, version)
+
     # resume: replay outputs of already-succeeded (iteration, position) pairs
     prior = list(
         await session.scalars(
@@ -311,6 +320,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                 history=history[:it],
                 agent_session_id=run.agent_session_id,
                 agents=agents_view,
+                prompts=prompts_view,
                 logger=logging.getLogger(f"iterlab.step.{handler_key}"),
                 checkpoint=_checkpoint,
                 step_timeout_s=step_timeout,
@@ -359,7 +369,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
             rs.finished_at = _now()
 
             if result.prompt is not None:
-                prompt = await _version_prompt(session, lab.id, result.prompt)
+                prompt = await _resolve_prompt(session, lab.id, result.prompt)
                 rs.prompt_id = prompt.id
                 rs.output = {
                     **result.output,

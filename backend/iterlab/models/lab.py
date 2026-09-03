@@ -31,6 +31,11 @@ class Lab(UUIDPrimaryKey, Timestamps, Base):
     # free-form lab configuration (goal prompt, test command, budgets, ...)
     settings: Mapped[dict] = mapped_column(JSONMap, default=dict, nullable=False)
 
+    # {prompt_slug: active_version_int} — which immutable prompt version each of
+    # the lab's prompt "lines" currently resolves to. Prompt text lives in
+    # registered, content-hashed Prompt rows; this is the only movable knob.
+    prompt_bindings: Mapped[dict | None] = mapped_column(JSONMap)
+
     # "manual" (created via the API/UI) or "instance" (provisioned from this
     # deployment's private instance config, and read-only via the API).
     source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)

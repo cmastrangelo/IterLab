@@ -877,6 +877,13 @@ table.lb tr.is-candidate td {
 .prompt-versions .step-out {
   max-width: 640px;
 }
+.prompt-versions tr.is-active-prompt td {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.prompt-versions tr.is-active-prompt .pill {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
 
 @media (max-width: 900px) {
   .agents-grid {

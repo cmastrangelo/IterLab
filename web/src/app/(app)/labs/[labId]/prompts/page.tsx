@@ -44,12 +44,16 @@ export default function PromptsTab() {
       </p>
     );
 
+  const bindings = lab.prompt_bindings ?? {};
+
   return (
     <div className="prompts">
       <p className="muted hint">
-        Each prompt line is versioned independently. A new version is minted only
-        when the template text changes — reruns of the same text reuse the version,
-        so stats accumulate per version.
+        Prompt text is <strong>immutable</strong> — each version is a registered,
+        content-hashed file (<code>prompts/&lt;lab&gt;/&lt;slug&gt;/v&lt;N&gt;.md</code>)
+        that can never change once recorded, so per-version stats stay clean. The
+        only knob is which version is <strong>active</strong>; a new wording is a
+        new file.
       </p>
 
       {groups.map(([slug, versions]) => (
@@ -60,6 +64,7 @@ export default function PromptsTab() {
             </h2>
             <span className="muted">
               {versions.length} version{versions.length === 1 ? "" : "s"}
+              {typeof bindings[slug] === "number" && ` · active: v${bindings[slug]}`}
             </span>
           </div>
 
@@ -78,14 +83,16 @@ export default function PromptsTab() {
             <tbody>
               {versions.map((p) => {
                 const isOpen = open === p.id;
+                const active = bindings[p.slug] === p.version;
                 return (
                   <tr
                     key={p.id}
-                    className="prompt-row"
+                    className={`prompt-row${active ? " is-active-prompt" : ""}`}
                     onClick={() => setOpen(isOpen ? null : p.id)}
                   >
                     <td className="num">
                       <strong>{p.version}</strong>
+                      {active && <span className="pill">active</span>}
                     </td>
                     <td className="prompt-text">
                       {isOpen ? (

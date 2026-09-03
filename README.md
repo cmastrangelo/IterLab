@@ -175,6 +175,7 @@ All settings are read from environment variables prefixed with `ITERLAB_`
 | `ITERLAB_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `ITERLAB_RUN_BUDGET_USD` | `2.0` | Per-run spend cap. The executor **pauses** a run (status `paused`) before starting a step once accumulated agent cost reaches this. Override per run with `cost_budget_usd` at dispatch; `0` disables. |
 | `ITERLAB_STEP_TIMEOUT_S` | `3600` | Wall-clock a single step may run. A handler that aborts on this raises a *resumable* error, so the run **pauses** rather than fails. Override per run with `step_timeout_s`. |
+| `ITERLAB_PROMPT_DRIFT_FATAL` | `false` | If a registered prompt version file is edited, fail startup instead of just logging an error. |
 
 A paused run — whether it hit the cost cap or a step's time budget — is continued with `POST /runs/{id}/resume` (or the button in the UI). With no arguments it tops up whatever ran out (+$2 / +1h) and re-queues; the executor replays finished steps and picks up from the one that stopped. `retry` stays for genuinely `failed` runs.
 
@@ -188,9 +189,10 @@ backend — a deployment adds that privately under `instance/` (git-ignored):
 
 ```
 instance/
-  .env             # secrets: DSNs, tokens (loaded into the environment)
-  labs/*.yaml       # lab definitions, provisioned into the DB on startup
-  adapters/*.py     # optional custom BenchmarkAdapter plugins
+  .env                          # secrets: DSNs, tokens (loaded into the environment)
+  labs/*.yaml                    # lab definitions, provisioned into the DB on startup
+  prompts/<lab>/<slug>/v<N>.md   # immutable prompt versions (see below)
+  adapters/*.py                  # optional custom BenchmarkAdapter plugins
 ```
 
 Copy `instance.example/` to `instance/` and edit. On startup each
@@ -207,6 +209,16 @@ Built-in adapters:
 
 Deployment-specific adapters live in `instance/adapters/*.py` and register
 themselves at startup.
+
+**Prompts are immutable.** A workflow's prompt text lives in
+`instance/prompts/<lab>/<slug>/v<N>.md` — one file per version. Once a version
+is registered its text can never change: edit the file and startup logs a loud
+error (or fails, with `ITERLAB_PROMPT_DRIFT_FATAL=1`) rather than silently
+minting a new version, so per-version effectiveness data stays clean. New
+wording = a new `v<N+1>.md`. Which version is *live* is the one movable knob —
+`prompts.active.<slug>` in the lab yaml; bump it to switch, set it back to
+revert, no text touched. A step handler reads the active text via
+`ctx.prompt("<slug>")`.
 
 ## Contributing
 
