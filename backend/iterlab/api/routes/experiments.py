@@ -12,7 +12,7 @@ from iterlab.models.candidate import Candidate
 from iterlab.models.enums import RunStatus
 from iterlab.models.experiment import Experiment, Run
 from iterlab.models.run_step import RunStep
-from iterlab.runs.executor import DEFAULT_RUN_BUDGET_USD
+from iterlab.runs.executor import DEFAULT_RUN_BUDGET_USD, DEFAULT_STEP_TIMEOUT_S
 from iterlab.schemas.experiment import (
     BenchmarkResultOut,
     CandidateOut,
@@ -188,7 +188,7 @@ async def retry_run(run_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
 @runs.post(
     "/{run_id}/resume",
     response_model=RunOut,
-    summary="Resume a paused run: raise its cost ceiling and re-queue it",
+    summary="Resume a paused run: top up whatever it ran out of and re-queue it",
 )
 async def resume_run(
     run_id: uuid.UUID,
@@ -201,11 +201,27 @@ async def resume_run(
         raise NotFoundError("run not found")
     if str(run.status) != "paused":
         raise APIError(f"run is {run.status}, not paused", code="not_paused")
-    add = body.additional_usd if body else 2.0
+
     ctx = dict(run.context or {})
-    current = float(ctx.get("cost_budget_usd") or DEFAULT_RUN_BUDGET_USD)
-    ctx["cost_budget_usd"] = round(current + add, 4)
+    kind = ctx.get("paused_kind", "cost")
+    add_usd = body.additional_usd if body else None
+    add_secs = body.additional_seconds if body else None
+    # nothing specified -> default top-up for whatever ran out
+    if add_usd is None and add_secs is None:
+        if kind == "step_time":
+            add_secs = 3600.0
+        else:
+            add_usd = 2.0
+
+    if add_usd:
+        cur = float(ctx.get("cost_budget_usd") or DEFAULT_RUN_BUDGET_USD)
+        ctx["cost_budget_usd"] = round(cur + add_usd, 4)
+    if add_secs:
+        cur_t = float(ctx.get("step_timeout_s") or DEFAULT_STEP_TIMEOUT_S)
+        ctx["step_timeout_s"] = round(cur_t + add_secs, 1)
+
     ctx.pop("paused_reason", None)
+    ctx.pop("paused_kind", None)
     run.context = ctx
     run.status = RunStatus.pending
     run.error = None

@@ -40,6 +40,15 @@ class StepContext:
     # agent finishes). Merged into the step's recorded output; an
     # ``agent_session_id`` key is promoted to the run immediately.
     checkpoint: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+    # wall-clock budget (seconds) this run allows a single step; a handler that
+    # runs a subprocess should enforce it. ``resume`` tops this up.
+    step_timeout_s: float | None = None
+    # >1 when this exact (iteration, position) is being re-run after a resumable
+    # stop — a handler can pick up where it left off instead of starting over.
+    attempt: int = 1
+    # the previous attempt's recorded output, when attempt > 1 (e.g. so a
+    # resuming agent step targets the same file it was already working on).
+    prior_output: dict[str, Any] | None = None
 
     def agent(self, name: str | None) -> dict[str, Any] | None:
         return self.agents.get(name) if name else None
@@ -100,7 +109,12 @@ class StepResult:
 
 
 class StepError(RuntimeError):
-    """A step handler failed. ``output``/``agent_session_id`` are recorded anyway."""
+    """A step handler failed. ``output``/``agent_session_id`` are recorded anyway.
+
+    ``resumable=True`` marks a stop the run can continue from with more
+    resources (it ran out of time/room, it isn't broken). The executor pauses
+    the run instead of failing it; ``resume`` tops up and re-queues.
+    """
 
     def __init__(
         self,
@@ -108,10 +122,12 @@ class StepError(RuntimeError):
         *,
         output: dict[str, Any] | None = None,
         agent_session_id: str | None = None,
+        resumable: bool = False,
     ):
         super().__init__(message)
         self.output = output or {}
         self.agent_session_id = agent_session_id
+        self.resumable = resumable
 
 
 class StepHandler(abc.ABC):

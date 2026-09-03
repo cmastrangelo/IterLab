@@ -45,6 +45,11 @@ logger = logging.getLogger("iterlab.runs")
 # Resuming raises the ceiling. Overridable per run via context["cost_budget_usd"].
 DEFAULT_RUN_BUDGET_USD = float(os.environ.get("ITERLAB_RUN_BUDGET_USD", "2.0"))
 
+# Wall-clock a single step may run before a handler should abort it. A step that
+# aborts on this should raise StepError(resumable=True) so the run pauses (not
+# fails); resume tops it up. Overridable per run via context["step_timeout_s"].
+DEFAULT_STEP_TIMEOUT_S = float(os.environ.get("ITERLAB_STEP_TIMEOUT_S", "3600"))
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -172,6 +177,24 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
     ctx_state = dict(run.context or {})
     iterations = int(ctx_state.get("iterations") or workflow.get("iterations", 1))
     budget = float(ctx_state.get("cost_budget_usd") or DEFAULT_RUN_BUDGET_USD)
+    step_timeout = float(ctx_state.get("step_timeout_s") or DEFAULT_STEP_TIMEOUT_S)
+
+    async def _pause(kind: str, it: int, reason: str) -> None:
+        run.status = RunStatus.paused
+        run.finished_at = None
+        run.error = None
+        run.context = {
+            **ctx_state,
+            "iterations": iterations,
+            "iterations_done": it,
+            "cost_budget_usd": budget,
+            "step_timeout_s": step_timeout,
+            "spent_usd": await _run_spend(session, run.id),
+            "paused_kind": kind,  # "cost" | "step_time"
+            "paused_reason": reason,
+            "agent_session_id": run.agent_session_id,
+        }
+        await session.commit()
 
     # per-run agent override: applied to any step whose config names an agent
     agent_override = ctx_state.get("agent_override")
@@ -182,11 +205,17 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                 cfg["agent"] = agent_override
                 step["config"] = cfg
 
+    # a re-queued run may still carry pause bookkeeping from last time
+    for k in ("paused_kind", "paused_reason"):
+        ctx_state.pop(k, None)
     run.status = RunStatus.running
     run.started_at = _now()
     run.error = None
     await session.commit()
-    logger.info("run %s: %d step(s) x %d iteration(s)", run.id, len(steps), iterations)
+    logger.info(
+        "run %s: %d step(s) x %d iteration(s), $%.2f cap, %.0fs/step",
+        run.id, len(steps), iterations, budget, step_timeout,
+    )
 
     lab_view = {
         "id": str(lab.id),
@@ -214,12 +243,18 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
         )
     )
     done: set[tuple[int, int]] = set()
+    retried: set[tuple[int, int]] = set()  # (it, pos) re-run after a resumable stop
+    prior_output: dict[tuple[int, int], dict] = {}
     history: list[dict] = [{} for _ in range(iterations)]
     for ps in prior:
         if ps.status == "succeeded" and ps.iteration < iterations:
             done.add((ps.iteration, ps.position))
             history[ps.iteration][ps.handler] = ps.output or {}
         else:
+            if ps.iteration < iterations:
+                retried.add((ps.iteration, ps.position))
+                if ps.output:
+                    prior_output[(ps.iteration, ps.position)] = ps.output
             await session.delete(ps)
     await session.commit()
 
@@ -239,21 +274,11 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                     "run %s: paused — spent $%.4f of $%.2f cap (before %d.%d %s)",
                     run.id, spent, budget, it, pos, handler_key,
                 )
-                run.status = RunStatus.paused
-                run.finished_at = None
-                run.context = {
-                    **ctx_state,
-                    "iterations": iterations,
-                    "iterations_done": it,
-                    "cost_budget_usd": budget,
-                    "spent_usd": spent,
-                    "paused_reason": (
-                        f"cost cap ${budget:.2f} reached (${spent:.2f} spent); "
-                        "resume to add budget and continue"
-                    ),
-                    "agent_session_id": run.agent_session_id,
-                }
-                await session.commit()
+                await _pause(
+                    "cost", it,
+                    f"cost cap ${budget:.2f} reached (${spent:.2f} spent); "
+                    "resume to add budget and continue",
+                )
                 return run
 
             rs = RunStep(
@@ -288,18 +313,34 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                 agents=agents_view,
                 logger=logging.getLogger(f"iterlab.step.{handler_key}"),
                 checkpoint=_checkpoint,
+                step_timeout_s=step_timeout,
+                attempt=2 if (it, pos) in retried else 1,
+                prior_output=prior_output.get((it, pos)),
             )
             try:
                 result = await get_step_handler(handler_key).run(ctx)
             except Exception as err:  # noqa: BLE001
-                logger.exception("run %s [%d.%d %s] failed", run.id, it, pos, handler_key)
+                sid = getattr(err, "agent_session_id", None) if isinstance(err, StepError) else None
+                if sid:
+                    run.agent_session_id = sid
                 rs.status = "failed"
                 rs.error = str(err)
                 rs.output = getattr(err, "output", None) or None
                 rs.finished_at = _now()
-                sid = getattr(err, "agent_session_id", None) if isinstance(err, StepError) else None
-                if sid:
-                    run.agent_session_id = sid
+                await session.commit()
+
+                if isinstance(err, StepError) and err.resumable:
+                    logger.warning(
+                        "run %s [%d.%d %s]: resumable stop — %s", run.id, it, pos, handler_key, err
+                    )
+                    await _pause(
+                        "step_time", it,
+                        f"{err} (iteration {it}, {handler_key}); resume to extend the "
+                        "time budget and continue",
+                    )
+                    return run
+
+                logger.exception("run %s [%d.%d %s] failed", run.id, it, pos, handler_key)
                 run.status = RunStatus.failed
                 run.error = f"iteration {it} step {pos} ({handler_key}): {err}"
                 run.finished_at = _now()
@@ -307,6 +348,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
                     **ctx_state,
                     "iterations": iterations,
                     "cost_budget_usd": budget,
+                    "step_timeout_s": step_timeout,
                     "spent_usd": await _run_spend(session, run.id),
                 }
                 await session.commit()
@@ -355,6 +397,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
             "iterations": iterations,
             "iterations_done": it + 1,
             "cost_budget_usd": budget,
+            "step_timeout_s": step_timeout,
             "spent_usd": await _run_spend(session, run.id),
             "agent_session_id": run.agent_session_id,
         }
@@ -366,6 +409,7 @@ async def execute_run(session: AsyncSession, run_id: uuid.UUID) -> Run:
         **(run.context or {}),
         "spent_usd": await _run_spend(session, run.id),
         "cost_budget_usd": budget,
+        "step_timeout_s": step_timeout,
     }
     await session.commit()
     logger.info("run %s: done (%d candidate iteration(s))", run.id, iterations)

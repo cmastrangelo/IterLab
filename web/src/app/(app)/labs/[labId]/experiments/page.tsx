@@ -21,11 +21,18 @@ const ACTIVE = new Set(["pending", "scheduled", "running"]);
 interface RunBudget {
   spent_usd?: number;
   cost_budget_usd?: number;
+  step_timeout_s?: number;
   paused_reason?: string;
+  paused_kind?: "cost" | "step_time";
 }
 
 function StatusPill({ status }: { status: string }) {
   return <span className={`run-status run-${status}`}>{status}</span>;
+}
+
+// what a default resume adds, given why the run paused
+function resumeLabel(ctx: RunBudget): string {
+  return ctx.paused_kind === "step_time" ? "Resume (+1h)" : "Resume (+$2)";
 }
 
 function BudgetNote({ ctx }: { ctx: RunBudget }) {
@@ -62,15 +69,13 @@ function RunDetailBlock({ runId }: { runId: string }) {
     <div className="run-detail">
       {run.status === "paused" && (
         <div className="pause-banner">
-          <span>
-            ⏸ {ctx.paused_reason ?? "paused at cost cap"}
-          </span>
+          <span>⏸ {ctx.paused_reason ?? "paused — resume to continue"}</span>
           <button
             type="button"
             className="ghost-btn"
             onClick={() => resumeRun(run.id).then(load)}
           >
-            Resume (+$2)
+            {resumeLabel(ctx)}
           </button>
         </div>
       )}
@@ -189,8 +194,10 @@ export default function ExperimentsTab() {
         </ol>
         <p className="muted hint">
           A run is queued <code>pending</code>. Execute it on a host with the agent
-          CLI + repo checkout: <code>iterlab-runner --once</code>. A run pauses at a{" "}
-          <strong>$2.00</strong> spend cap; resume it to add budget and continue.
+          CLI + repo checkout: <code>iterlab-runner --once</code>. A run pauses (not
+          fails) when it hits its <strong>$2.00</strong> spend cap or a step runs past
+          its <strong>1&nbsp;h</strong> time budget; resume to top that up and continue
+          where it left off.
         </p>
       </section>
 
@@ -237,7 +244,7 @@ export default function ExperimentsTab() {
                               );
                             }}
                           >
-                            resume (+$2)
+                            {resumeLabel(r.context as RunBudget).toLowerCase()}
                           </button>
                         </span>
                       ) : (

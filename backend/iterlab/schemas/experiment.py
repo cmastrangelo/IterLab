@@ -16,8 +16,15 @@ class RunCreate(BaseModel):
 
 
 class RunResume(BaseModel):
-    # USD to add to a paused run's ceiling before re-queuing it
-    additional_usd: float = Field(default=2.0, gt=0, le=1000)
+    """Top-ups applied to a paused run before it is re-queued.
+
+    With neither field set, the executor adds a sensible default to whichever
+    budget the run actually ran out of (see ``paused_kind``): +$2 for a cost
+    stop, +1h/step for a time stop.
+    """
+
+    additional_usd: float | None = Field(default=None, ge=0, le=1000)
+    additional_seconds: float | None = Field(default=None, ge=0, le=86400)
 
 
 class ExperimentOut(BaseModel):

@@ -113,7 +113,37 @@ class _Boom(StepHandler):
         )
 
 
-for h in (_MakeSolution, _Bench, _Boom, _IterAgent, _IterBench, _PromptAgent, _CostAgent):
+class _TimesOutOnce(StepHandler):
+    """Raises a resumable StepError on attempt 1, succeeds on attempt 2 —
+    and records the context it saw each time."""
+
+    key = "test_timeout_once"
+    seen: list[dict] = []
+
+    async def run(self, ctx: StepContext) -> StepResult:
+        _TimesOutOnce.seen.append(
+            {
+                "attempt": ctx.attempt,
+                "step_timeout_s": ctx.step_timeout_s,
+                "prior_output": ctx.prior_output,
+            }
+        )
+        if ctx.attempt == 1:
+            raise StepError(
+                "step exceeded its time budget",
+                output={"file": "sol.py", "conversation_id": "conv-1"},
+                agent_session_id="conv-1",
+                resumable=True,
+            )
+        return StepResult(
+            output={"file": "sol.py", "done": True},
+            candidate=CandidateInfo(name="sol.py", score=42.0),
+        )
+
+
+for h in (
+    _MakeSolution, _Bench, _Boom, _IterAgent, _IterBench, _PromptAgent, _CostAgent, _TimesOutOnce
+):
     register_step_handler(h)
 
 
@@ -296,6 +326,47 @@ async def test_cost_cap_pauses_run_and_resume_continues(client: AsyncClient) -> 
     assert detail["context"]["spent_usd"] == 1.6
     assert detail["context"]["cost_budget_usd"] == 3.0
     assert len(detail["candidates"]) == 4
+
+
+async def test_resumable_step_error_pauses_then_resume_completes(client: AsyncClient) -> None:
+    _TimesOutOnce.seen.clear()
+    headers = await _auth(client)
+    _lab_id, exp_id = await _lab_with_workflow(
+        [StepSpec(handler="test_timeout_once")], slug="timeout-lab"
+    )
+    run = (await client.post(f"/experiments/{exp_id}/runs", headers=headers)).json()
+
+    async with get_sessionmaker()() as session:
+        await execute_run(session, uuid.UUID(run["id"]))
+
+    detail = (await client.get(f"/runs/{run['id']}", headers=headers)).json()
+    # a resumable stop pauses the run — it does NOT fail it
+    assert detail["status"] == "paused"
+    assert detail["context"]["paused_kind"] == "step_time"
+    assert "time budget" in detail["context"]["paused_reason"]
+    assert detail["agent_session_id"] == "conv-1"
+    assert detail["candidates"] == []
+
+    # resume with no args -> default +1h onto the step budget for a time stop
+    base_timeout = detail["context"]["step_timeout_s"]
+    r = await client.post(f"/runs/{run['id']}/resume", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+
+    async with get_sessionmaker()() as session:
+        await execute_run(session, uuid.UUID(run["id"]))
+
+    detail = (await client.get(f"/runs/{run['id']}", headers=headers)).json()
+    assert detail["status"] == "succeeded"
+    assert detail["candidates"][0]["score"] == 42.0
+    assert detail["context"]["step_timeout_s"] == base_timeout + 3600
+
+    # the handler saw attempt 2 + the prior attempt's output on the re-run
+    assert [s["attempt"] for s in _TimesOutOnce.seen] == [1, 2]
+    assert _TimesOutOnce.seen[1]["prior_output"] == {
+        "file": "sol.py", "conversation_id": "conv-1"
+    }
+    assert _TimesOutOnce.seen[1]["step_timeout_s"] == base_timeout + 3600
 
 
 async def test_resume_rejects_non_paused_run(client: AsyncClient) -> None:

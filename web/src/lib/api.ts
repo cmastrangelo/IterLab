@@ -406,10 +406,14 @@ export const createRun = (experimentId: string, opts: RunOptions = {}) =>
   });
 export const retryRun = (runId: string) =>
   apiFetch<Run>(`/runs/${runId}/retry`, { method: "POST" });
-export const resumeRun = (runId: string, additionalUsd = 2) =>
+// no args -> the API tops up whatever the run ran out of (+$2 cost / +1h time)
+export const resumeRun = (
+  runId: string,
+  opts: { additional_usd?: number; additional_seconds?: number } = {},
+) =>
   apiFetch<Run>(`/runs/${runId}/resume`, {
     method: "POST",
-    body: JSON.stringify({ additional_usd: additionalUsd }),
+    body: JSON.stringify(opts),
   });
 export const getRun = (runId: string) => apiFetch<RunDetail>(`/runs/${runId}`);
 
